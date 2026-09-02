@@ -1,0 +1,46 @@
+name: Tabby
+options:
+  bundleIdPrefix: com.seanking
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "13.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  Tabby:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: Tabby
+    info:
+      path: Tabby/Info.plist
+      properties:
+        LSUIElement: true
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        NSPrincipalClass: NSApplication
+        NSHumanReadableCopyright: ""
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.seanking.Tabby
+        PRODUCT_NAME: Tabby
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ENABLE_HARDENED_RUNTIME: NO
+        COMBINE_HIDPI_IMAGES: YES
+        GENERATE_INFOPLIST_FILE: NO
+  TabbyTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: TabbyTests
+    dependencies:
+      - target: Tabby
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.seanking.TabbyTests
+        GENERATE_INFOPLIST_FILE: YES

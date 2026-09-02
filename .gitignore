@@ -1,0 +1,12 @@
+.DS_Store
+/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# XcodeGen generates the project from project.yml — regenerate with `xcodegen generate`
+*.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/
