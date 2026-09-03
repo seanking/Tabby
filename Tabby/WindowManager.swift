@@ -137,16 +137,28 @@ final class WindowManager: Sendable {
             // frame). Windows with no AX element are helper/panel surfaces.
             guard let axWindow = axWindows[window.id] else { return nil }
 
-            // Require a standard window to drop helper/panel windows — but only
-            // for visible apps: a hidden app (⌘H) misreports its subroles (its
-            // real windows come back as AXDialog), which would wrongly drop them.
-            if !window.isHidden, !isStandardWindow(axWindow) {
+            let subrole = axString(axWindow, kAXSubroleAttribute as String)
+            let axTitle = axString(axWindow, kAXTitleAttribute as String) ?? ""
+            let effectiveTitle = window.title.isEmpty ? axTitle : window.title
+
+            if window.isHidden {
+                // Hidden apps (⌘H) misreport subroles (real windows come back as
+                // AXDialog), so don't require AXStandardWindow. But still drop
+                // obvious non-windows: AXUnknown surfaces and untitled helper
+                // windows (e.g. the transparent/shadow windows Electron/Tauri
+                // apps like cmux expose), which would otherwise appear as extra,
+                // blank rows.
+                if subrole == "AXUnknown" { return nil }
+                if subrole != (kAXStandardWindowSubrole as String), effectiveTitle.isEmpty {
+                    return nil
+                }
+            } else if !isStandardWindow(axWindow) {
+                // Visible app: require a standard window to drop helper/panels.
                 return nil
             }
 
-            guard window.title.isEmpty,
-                  let title = axString(axWindow, kAXTitleAttribute as String), !title.isEmpty
-            else { return window }
+            guard window.title.isEmpty, !axTitle.isEmpty else { return window }
+            let title = axTitle
 
             return WindowInfo(
                 id: window.id,

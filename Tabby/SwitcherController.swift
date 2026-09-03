@@ -113,10 +113,9 @@ final class SwitcherController: ObservableObject {
         guard !isPanelPresented, !windows.isEmpty else { return }
         isPanelPresented = true
         showPanel()
-        // Only capture window snapshots when the preview feature is enabled.
-        if previewEnabled {
-            loadThumbnails()
-        }
+        // Always capture snapshots so the "P" preview hotkey works even when the
+        // automatic dwell preview is turned off.
+        loadThumbnails()
         // Start the dwell timer for the initial selection so simply holding Cmd
         // on the default window eventually reveals its preview.
         scheduleDwellPreview()
@@ -146,9 +145,10 @@ final class SwitcherController: ObservableObject {
     }
 
     /// Pressing "P" while switching shows the preview immediately (skipping the
-    /// dwell) or hides it if already showing.
+    /// dwell) or hides it if already showing. Works regardless of the automatic
+    /// preview setting — that setting only governs the dwell, not this hotkey.
     private func togglePreview() {
-        guard isPanelPresented, previewEnabled else { return }
+        guard isPanelPresented else { return }
         dwellTask?.cancel()
         if previewWindowID != nil {
             previewWindowID = nil
