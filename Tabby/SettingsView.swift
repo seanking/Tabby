@@ -11,15 +11,23 @@ enum SettingsKey {
 /// group of related options.
 struct SettingsView: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
+    @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
         Form {
             Section("Appearance") {
                 Toggle("Show app name", isOn: $showAppName)
             }
+
+            Section("General") {
+                Toggle("Launch at login", isOn: Binding(
+                    get: { launchAtLogin.isEnabled },
+                    set: { launchAtLogin.setEnabled($0) }
+                ))
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 160)
+        .frame(width: 380, height: 220)
     }
 }
 
