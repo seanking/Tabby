@@ -54,8 +54,12 @@ final class WindowManager: Sendable {
             guard pid != selfPID else { continue }
 
             for (windowID, axWindow) in axWindowsByID(for: pid) {
+                // Don't require AXStandardWindow here: on current macOS minimized
+                // windows misreport their subrole as AXDialog (the same quirk
+                // hidden apps have), so that check would wrongly drop every
+                // minimized window. AXMinimized is a sufficient signal on its own —
+                // only real windows minimize to the Dock.
                 guard !existingIDs.contains(windowID),
-                      isStandardWindow(axWindow),
                       axBool(axWindow, kAXMinimizedAttribute as String)
                 else { continue }
 
@@ -223,12 +227,20 @@ final class WindowManager: Sendable {
                 guard
                     let name = axString(item, kAXTitleAttribute as String),
                     let badge = axString(item, "AXStatusLabel"),
-                    !badge.isEmpty
+                    Self.isBadgeCount(badge)
                 else { continue }
                 badges[name] = badge
             }
         }
         return badges
+    }
+
+    /// Whether a Dock tile's status label is an actual notification count
+    /// ("3", "99+") rather than other text a tile can transiently expose (e.g. a
+    /// date), which we don't want to render as a badge.
+    private static func isBadgeCount(_ label: String) -> Bool {
+        let digits = label.hasSuffix("+") ? label.dropLast() : Substring(label)
+        return !digits.isEmpty && digits.allSatisfy(\.isNumber)
     }
 
     private func axChildren(of element: AXUIElement) -> [AXUIElement]? {

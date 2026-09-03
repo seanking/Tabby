@@ -7,6 +7,13 @@ struct SwitcherView: View {
     private let iconSize: CGFloat = 26
     private let spacing: CGFloat = 4
     private let previewHeight: CGFloat = 200
+    private let scrollSpace = "switcherScroll"
+
+    /// Y positions of the content's top and bottom edges within the scroll
+    /// viewport (0...maxColumnHeight). Used to decide whether rows extend past
+    /// the visible area in each direction, so we can show scroll chevrons.
+    @State private var topEdgeY: CGFloat = 0
+    @State private var bottomEdgeY: CGFloat = 0
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -33,8 +40,35 @@ struct SwitcherView: View {
                     }
                 }
                 .padding(12)
+                .overlay(alignment: .top) {
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: TopEdgeKey.self,
+                            value: geo.frame(in: .named(scrollSpace)).minY
+                        )
+                    }
+                    .frame(height: 0)
+                }
+                .overlay(alignment: .bottom) {
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: BottomEdgeKey.self,
+                            value: geo.frame(in: .named(scrollSpace)).minY
+                        )
+                    }
+                    .frame(height: 0)
+                }
             }
+            .coordinateSpace(name: scrollSpace)
             .frame(height: maxColumnHeight)
+            .onPreferenceChange(TopEdgeKey.self) { topEdgeY = $0 }
+            .onPreferenceChange(BottomEdgeKey.self) { bottomEdgeY = $0 }
+            .overlay(alignment: .top) {
+                if canScrollUp { scrollChevron(up: true) }
+            }
+            .overlay(alignment: .bottom) {
+                if canScrollDown { scrollChevron(up: false) }
+            }
             .onChange(of: controller.selectedIndex) { newValue in
                 guard controller.windows.indices.contains(newValue) else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
@@ -61,6 +95,37 @@ struct SwitcherView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .fixedSize()
+    }
+
+    /// Whether rows extend above the visible area (something scrolled off the top):
+    /// the content's top edge sits above the viewport's top (y = 0).
+    private var canScrollUp: Bool {
+        topEdgeY < -1
+    }
+
+    /// Whether rows extend below the visible area (something scrolled off the
+    /// bottom): the content's bottom edge sits below the viewport's bottom.
+    private var canScrollDown: Bool {
+        bottomEdgeY - maxColumnHeight > 1
+    }
+
+    /// A chevron fading in at the top or bottom edge to signal more rows in that
+    /// direction. Non-interactive so it doesn't block the list.
+    private func scrollChevron(up: Bool) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(nsColor: .windowBackgroundColor).opacity(0.95), .clear],
+                startPoint: up ? .top : .bottom,
+                endPoint: up ? .bottom : .top
+            )
+            Image(systemName: up ? "chevron.compact.up" : "chevron.compact.down")
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(.secondary)
+                .frame(maxHeight: .infinity, alignment: up ? .top : .bottom)
+                .padding(up ? .top : .bottom, 2)
+        }
+        .frame(height: 26)
+        .allowsHitTesting(false)
     }
 
     /// The captured window image to show under `window`, or nil when it isn't the
@@ -165,9 +230,9 @@ private struct WindowRow: View {
         switcherDisplayName(for: window, showAppName: showAppName)
     }
 
-    /// Hidden apps and minimized windows are shown grayed out.
+    /// Hidden apps are shown grayed out. Minimized windows are shown normally.
     private var isDimmed: Bool {
-        window.isHidden || window.isMinimized
+        window.isHidden
     }
 
     var body: some View {
@@ -244,5 +309,21 @@ private struct VisualEffectBackground: NSViewRepresentable {
         nsView.material = material
         nsView.blendingMode = blendingMode
         nsView.layer?.cornerRadius = cornerRadius
+    }
+}
+
+/// Y position of the switcher content's top edge within the scroll viewport.
+private struct TopEdgeKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+/// Y position of the switcher content's bottom edge within the scroll viewport.
+private struct BottomEdgeKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
