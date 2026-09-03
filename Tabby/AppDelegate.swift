@@ -83,6 +83,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openAccessibilitySettings() {
+        // Surface the system prompt (also registers the app in the Accessibility
+        // list), then take the user to the relevant Settings pane.
+        _ = Permissions.isAccessibilityTrusted(prompt: true)
         Permissions.openAccessibilitySettings()
     }
 
@@ -112,10 +115,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Permission gate
 
     /// Cmd+Tab interception and window raising both require Accessibility
-    /// access. Prompt once, then poll until granted (the user has to leave
-    /// the app to flip the switch in System Settings) before starting the tap.
+    /// access. Check quietly (without prompting) and poll until granted — the
+    /// system prompt is only shown when the user explicitly chooses "Grant
+    /// Accessibility Access…" from the menu, so it doesn't reappear on every
+    /// run (each debug build is a fresh, untrusted binary).
     private func beginPermissionGate() {
-        if Permissions.isAccessibilityTrusted(prompt: true) {
+        if Permissions.isAccessibilityTrusted(prompt: false) {
             switcher.start()
             return
         }
