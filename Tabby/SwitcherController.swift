@@ -17,6 +17,12 @@ final class SwitcherController: ObservableObject {
     /// the dwell delay elapses without the selection changing.
     @Published private(set) var previewWindowID: CGWindowID?
 
+    /// Last successful window snapshot per window id, kept across Cmd+Tab
+    /// invocations. Lets hidden/minimized windows — which can't be captured live —
+    /// show their most recent on-screen image instead of just an icon. Pruned to
+    /// the current window list on each activation to bound memory.
+    private var thumbnailCache: [CGWindowID: NSImage] = [:]
+
     private let eventTap = EventTapManager()
     private let windowManager = WindowManager()
     private var panel: SwitcherPanel?
@@ -72,7 +78,14 @@ final class SwitcherController: ObservableObject {
             windowManager.icon(for: pid).map { (pid, $0) }
         })
         badges = badgesByPID(for: list)
-        thumbnails = [:]
+
+        // Drop cache entries for windows that no longer exist, then seed the
+        // visible thumbnails from the cache so hidden/minimized windows show
+        // their last snapshot right away. Live captures refresh these below.
+        let ids = Set(list.map(\.id))
+        thumbnailCache = thumbnailCache.filter { ids.contains($0.key) }
+        thumbnails = thumbnailCache
+
         selectedIndex = 1 // land on the next-most-recent window, like the system switcher
 
         // Don't show the HUD yet: a quick Cmd+Tab (Cmd released before the
@@ -287,6 +300,10 @@ final class SwitcherController: ObservableObject {
                 if let image = await manager.thumbnail(for: window) {
                     await MainActor.run { [weak self] in
                         self?.thumbnails[window.id] = image
+                        // Remember this snapshot so the window can still show a
+                        // preview later when it's hidden/minimized and can't be
+                        // captured live.
+                        self?.thumbnailCache[window.id] = image
                         // If this window's preview is already showing (e.g. "P"
                         // was pressed before its snapshot finished), re-fit now.
                         if self?.previewWindowID == window.id {
