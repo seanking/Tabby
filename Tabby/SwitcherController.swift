@@ -13,6 +13,9 @@ final class SwitcherController: ObservableObject {
     @Published private(set) var icons: [pid_t: NSImage] = [:]
     /// Notification badge labels (e.g. "3") keyed by app pid, read from the Dock.
     @Published private(set) var badges: [pid_t: String] = [:]
+    /// Window whose large preview is shown after the user dwells on it. Nil until
+    /// the dwell delay elapses without the selection changing.
+    @Published private(set) var previewWindowID: CGWindowID?
 
     private let eventTap = EventTapManager()
     private let windowManager = WindowManager()
@@ -29,6 +32,20 @@ final class SwitcherController: ObservableObject {
     /// switcher — while holding Cmd past it reveals the full list.
     private static let activationDelay: TimeInterval = 0.4
 
+    /// Fires the dwell preview if the selection is held long enough.
+    private var dwellTask: Task<Void, Never>?
+
+    /// Whether the window preview is enabled (Settings → Window preview).
+    private var previewEnabled: Bool {
+        UserDefaults.standard.object(forKey: SettingsKey.showWindowPreview) as? Bool ?? true
+    }
+
+    /// How long the user must dwell on a selection (Cmd held, no movement)
+    /// before its preview appears, from Settings.
+    private var previewDwell: TimeInterval {
+        UserDefaults.standard.object(forKey: SettingsKey.previewDwell) as? Double ?? SettingsKey.defaultPreviewDwell
+    }
+
     func start() {
         eventTap.onActivate = { [weak self] in self?.activate() }
         eventTap.onAdvance = { [weak self] reverse in self?.advance(reverse: reverse) }
@@ -38,6 +55,7 @@ final class SwitcherController: ObservableObject {
         eventTap.onHideSelected = { [weak self] in self?.hideSelected() }
         eventTap.onQuitSelected = { [weak self] in self?.quitSelected() }
         eventTap.onMinimizeSelected = { [weak self] in self?.minimizeSelected() }
+        eventTap.onTogglePreview = { [weak self] in self?.togglePreview() }
         eventTap.start()
     }
 
@@ -82,7 +100,49 @@ final class SwitcherController: ObservableObject {
         guard !isPanelPresented, !windows.isEmpty else { return }
         isPanelPresented = true
         showPanel()
-        loadThumbnails()
+        // Only capture window snapshots when the preview feature is enabled.
+        if previewEnabled {
+            loadThumbnails()
+        }
+        // Start the dwell timer for the initial selection so simply holding Cmd
+        // on the default window eventually reveals its preview.
+        scheduleDwellPreview()
+    }
+
+    /// (Re)starts the dwell timer for the current selection, hiding any preview
+    /// that was showing. If the same selection is held for `previewDwell` seconds
+    /// (Cmd still down), the selected window's large preview appears.
+    private func scheduleDwellPreview() {
+        dwellTask?.cancel()
+        if previewWindowID != nil {
+            previewWindowID = nil
+            resizePanelKeepingLeftEdge()
+        }
+        guard isPanelPresented, previewEnabled else { return }
+        dwellTask = Task { [weak self, dwell = previewDwell] in
+            try? await Task.sleep(for: .seconds(dwell))
+            guard !Task.isCancelled else { return }
+            self?.showDwellPreview()
+        }
+    }
+
+    private func showDwellPreview() {
+        guard isPanelPresented, windows.indices.contains(selectedIndex) else { return }
+        previewWindowID = windows[selectedIndex].id
+        resizePanelKeepingLeftEdge()
+    }
+
+    /// Pressing "P" while switching shows the preview immediately (skipping the
+    /// dwell) or hides it if already showing.
+    private func togglePreview() {
+        guard isPanelPresented, previewEnabled else { return }
+        dwellTask?.cancel()
+        if previewWindowID != nil {
+            previewWindowID = nil
+            resizePanelKeepingLeftEdge()
+        } else {
+            showDwellPreview()
+        }
     }
 
     /// Maps the Dock's badge labels (keyed by app name) onto the pids present
@@ -106,6 +166,8 @@ final class SwitcherController: ObservableObject {
         // HUD immediately rather than waiting out the delay.
         presentPanel()
         selectedIndex = Self.nextIndex(from: selectedIndex, reverse: reverse, count: windows.count)
+        // Moving the selection restarts the dwell timer and hides any preview.
+        scheduleDwellPreview()
     }
 
     /// Computes the next selection index, wrapping around at both ends. Pure and
@@ -208,6 +270,9 @@ final class SwitcherController: ObservableObject {
     private func endPresentation() {
         presentationTask?.cancel()
         presentationTask = nil
+        dwellTask?.cancel()
+        dwellTask = nil
+        previewWindowID = nil
         isPanelPresented = false
         hidePanel()
     }
@@ -219,9 +284,14 @@ final class SwitcherController: ObservableObject {
         thumbnailTask = Task.detached(priority: .userInitiated) {
             for window in snapshot {
                 if Task.isCancelled { return }
-                if let image = manager.thumbnail(for: window) {
+                if let image = await manager.thumbnail(for: window) {
                     await MainActor.run { [weak self] in
                         self?.thumbnails[window.id] = image
+                        // If this window's preview is already showing (e.g. "P"
+                        // was pressed before its snapshot finished), re-fit now.
+                        if self?.previewWindowID == window.id {
+                            self?.resizePanelKeepingLeftEdge()
+                        }
                     }
                 }
             }
@@ -242,6 +312,36 @@ final class SwitcherController: ObservableObject {
         guard let panel else { return }
         Task { @MainActor in
             self.centerOnActiveScreen(panel)
+        }
+    }
+
+    /// Re-fits the panel when the preview appears/disappears without moving the
+    /// existing list: the panel's top-left corner stays pinned so it only grows
+    /// or shrinks downward (the inline preview expands under the selected row),
+    /// animated so it eases open rather than the whole HUD jumping.
+    private func resizePanelKeepingLeftEdge() {
+        guard let panel else { return }
+        Task { @MainActor in
+            guard let contentView = panel.contentViewController?.view else { return }
+            contentView.layoutSubtreeIfNeeded()
+            let size = contentView.fittingSize
+
+            // AppKit frames are bottom-left based; pin the top-left corner so the
+            // list stays anchored and only the right edge (and, if needed, the
+            // bottom) moves.
+            let current = panel.frame
+            let newFrame = NSRect(
+                x: current.minX,
+                y: current.maxY - size.height,
+                width: size.width,
+                height: size.height
+            )
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.15
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrame(newFrame, display: true)
+            }
+            panel.invalidateShadow()
         }
     }
 

@@ -16,6 +16,8 @@ final class EventTapManager {
     var onHideSelected: (() -> Void)?
     var onQuitSelected: (() -> Void)?
     var onMinimizeSelected: (() -> Void)?
+    /// Fired when the user presses "P" while switching to show/hide the preview.
+    var onTogglePreview: (() -> Void)?
 
     private(set) var isSwitcherActive = false
 
@@ -120,6 +122,9 @@ final class EventTapManager {
                     return nil
                 case kVK_UpArrow, kVK_LeftArrow:
                     onAdvance?(true)
+                    return nil
+                case kVK_ANSI_P:
+                    onTogglePreview?()
                     return nil
                 default:
                     break

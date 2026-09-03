@@ -6,20 +6,29 @@ struct SwitcherView: View {
 
     private let iconSize: CGFloat = 26
     private let spacing: CGFloat = 4
+    private let previewHeight: CGFloat = 200
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: spacing) {
                     ForEach(Array(controller.windows.enumerated()), id: \.element.id) { index, window in
-                        WindowRow(
-                            window: window,
-                            icon: controller.icons[window.pid],
-                            badge: controller.badges[window.pid],
-                            isSelected: index == controller.selectedIndex,
-                            iconSize: iconSize,
-                            nameWidth: nameColumnWidth
-                        )
+                        VStack(spacing: spacing) {
+                            WindowRow(
+                                window: window,
+                                icon: controller.icons[window.pid],
+                                badge: controller.badges[window.pid],
+                                isSelected: index == controller.selectedIndex,
+                                iconSize: iconSize,
+                                nameWidth: nameColumnWidth
+                            )
+
+                            // Live window preview, revealed inline under the row
+                            // once the user has dwelled on it (Cmd held ~2s).
+                            if let image = previewImage(for: window) {
+                                preview(image)
+                            }
+                        }
                         .id(window.id)
                     }
                 }
@@ -30,6 +39,12 @@ struct SwitcherView: View {
                 guard controller.windows.indices.contains(newValue) else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
                     proxy.scrollTo(controller.windows[newValue].id, anchor: .center)
+                }
+            }
+            .onChange(of: controller.previewWindowID) { newValue in
+                guard let id = newValue else { return }
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo(id, anchor: .center)
                 }
             }
         }
@@ -48,11 +63,50 @@ struct SwitcherView: View {
         .fixedSize()
     }
 
+    /// The captured window image to show under `window`, or nil when it isn't the
+    /// dwelled-on selection (or no thumbnail is available).
+    private func previewImage(for window: WindowInfo) -> NSImage? {
+        guard controller.previewWindowID == window.id else { return nil }
+        return controller.thumbnails[window.id]
+    }
+
+    /// A live window snapshot, letterboxed into the list's width so the HUD only
+    /// grows downward when it appears — the left and right edges never move.
+    private func preview(_ image: NSImage) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: rowContentWidth, height: previewHeight)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            )
+            .padding(.top, 2)
+            .padding(.bottom, 4)
+    }
+
     private var maxColumnHeight: CGFloat {
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
         let rowHeight = iconSize + 8
-        let naturalHeight = CGFloat(controller.windows.count) * (rowHeight + spacing) + spacing + 24
+        var naturalHeight = CGFloat(controller.windows.count) * (rowHeight + spacing) + spacing + 24
+        // Reserve room for the inline preview so the panel grows to fit it.
+        if previewVisible {
+            naturalHeight += previewHeight + spacing + 6
+        }
         return min(naturalHeight, screenHeight * 0.85)
+    }
+
+    /// True when a dwell preview is currently showing (an image exists for it).
+    private var previewVisible: Bool {
+        guard let id = controller.previewWindowID else { return false }
+        return controller.thumbnails[id] != nil
+    }
+
+    /// Width of a row's content (icon + gap + name column + row padding). The
+    /// inline preview is sized to this so the HUD's width never changes.
+    private var rowContentWidth: CGFloat {
+        iconSize + 8 + nameColumnWidth + 16
     }
 
     /// Width of the name column, sized to the longest label so nothing is

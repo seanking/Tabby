@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import ScreenCaptureKit
 
 /// Enumerates on-screen windows across every app and can raise/focus one of
 /// them by combining the CoreGraphics window list (for ordering, bounds and
@@ -254,18 +255,40 @@ final class WindowManager: Sendable {
         return (ref as? Bool) ?? false
     }
 
-    /// Captures a snapshot of a single window for the switcher HUD. Requires
-    /// Screen Recording access; returns nil (falls back to icon-only) without it.
-    func thumbnail(for window: WindowInfo) -> NSImage? {
-        guard let cgImage = CGWindowListCreateImage(
-            .null,
-            .optionIncludingWindow,
-            window.id,
-            [.boundsIgnoreFraming, .bestResolution]
-        ) else {
+    /// Captures a live snapshot of a single window for the switcher HUD via
+    /// ScreenCaptureKit (the modern replacement for the deprecated
+    /// `CGWindowListCreateImage`). Requires Screen Recording access and macOS 14+;
+    /// returns nil (so the UI falls back to the app icon) without it or if the
+    /// window can't be captured (e.g. it's minimized/off-screen).
+    func thumbnail(for window: WindowInfo) async -> NSImage? {
+        guard #available(macOS 14.0, *) else { return nil }
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(
+                false,
+                onScreenWindowsOnly: true
+            )
+            guard let scWindow = content.windows.first(where: { $0.windowID == window.id }) else {
+                return nil
+            }
+
+            let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+            let config = SCStreamConfiguration()
+            // Capture at 2x the window's point size for a crisp preview on
+            // Retina displays, while keeping the image a reasonable size.
+            let scale = 2
+            config.width = max(Int(scWindow.frame.width) * scale, 1)
+            config.height = max(Int(scWindow.frame.height) * scale, 1)
+            config.showsCursor = false
+            config.ignoreShadowsSingleWindow = true
+
+            let cgImage = try await SCScreenshotManager.captureImage(
+                contentFilter: filter,
+                configuration: config
+            )
+            return NSImage(cgImage: cgImage, size: NSSize(width: scWindow.frame.width, height: scWindow.frame.height))
+        } catch {
             return nil
         }
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 
     /// Activates the window's owning app and raises/focuses that specific
