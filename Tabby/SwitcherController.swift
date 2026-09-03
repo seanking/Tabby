@@ -19,6 +19,16 @@ final class SwitcherController: ObservableObject {
     private var panel: SwitcherPanel?
     private var thumbnailTask: Task<Void, Never>?
 
+    /// Pending timer that reveals the HUD if Cmd is still held after the delay.
+    private var presentationTask: Task<Void, Never>?
+    /// Whether the HUD is currently on screen (vs. an in-flight quick switch).
+    private var isPanelPresented = false
+
+    /// How long the first Cmd+Tab waits before showing the HUD. Releasing Cmd
+    /// within this window just switches to the next window — like the system
+    /// switcher — while holding Cmd past it reveals the full list.
+    private static let activationDelay: TimeInterval = 0.4
+
     func start() {
         eventTap.onActivate = { [weak self] in self?.activate() }
         eventTap.onAdvance = { [weak self] reverse in self?.advance(reverse: reverse) }
@@ -45,6 +55,31 @@ final class SwitcherController: ObservableObject {
         badges = badgesByPID(for: list)
         thumbnails = [:]
         selectedIndex = 1 // land on the next-most-recent window, like the system switcher
+
+        // Don't show the HUD yet: a quick Cmd+Tab (Cmd released before the
+        // delay) should just switch to the next window. Only reveal the list if
+        // Cmd is still held once the timer fires.
+        schedulePresentation()
+    }
+
+    /// Starts the delay after which the HUD appears if the user keeps holding
+    /// Cmd. Cancelled if Cmd is released (quick switch) or the switch ends.
+    private func schedulePresentation() {
+        presentationTask?.cancel()
+        presentationTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.activationDelay))
+            guard !Task.isCancelled else { return }
+            self?.presentPanel()
+        }
+    }
+
+    /// Reveals the HUD now, cancelling the pending delay. No-op if already shown
+    /// or if the switch was cancelled/committed in the meantime.
+    private func presentPanel() {
+        presentationTask?.cancel()
+        presentationTask = nil
+        guard !isPanelPresented, !windows.isEmpty else { return }
+        isPanelPresented = true
         showPanel()
         loadThumbnails()
     }
@@ -66,6 +101,9 @@ final class SwitcherController: ObservableObject {
 
     private func advance(reverse: Bool) {
         guard !windows.isEmpty else { return }
+        // A second Tab (or arrow key) means the user wants to browse: reveal the
+        // HUD immediately rather than waiting out the delay.
+        presentPanel()
         selectedIndex = Self.nextIndex(from: selectedIndex, reverse: reverse, count: windows.count)
     }
 
@@ -80,6 +118,7 @@ final class SwitcherController: ObservableObject {
     /// its rows in place (the app stays in the list).
     private func hideSelected() {
         guard windows.indices.contains(selectedIndex) else { return }
+        presentPanel()
         let pid = windows[selectedIndex].pid
         windowManager.hide(pid: pid)
         windows = Self.markingHidden(pid: pid, in: windows)
@@ -89,6 +128,7 @@ final class SwitcherController: ObservableObject {
     /// windows from the list, keeping the selection valid.
     private func quitSelected() {
         guard windows.indices.contains(selectedIndex) else { return }
+        presentPanel()
         let pid = windows[selectedIndex].pid
         windowManager.quit(pid: pid)
 
@@ -108,6 +148,7 @@ final class SwitcherController: ObservableObject {
     /// selecting it).
     private func minimizeSelected() {
         guard windows.indices.contains(selectedIndex) else { return }
+        presentPanel()
         let window = windows[selectedIndex]
         windowManager.minimize(window)
         windows = Self.markingMinimized(id: window.id, in: windows)
@@ -149,7 +190,7 @@ final class SwitcherController: ObservableObject {
     }
 
     private func commit() {
-        hidePanel()
+        endPresentation()
         if windows.indices.contains(selectedIndex) {
             windowManager.activate(windows[selectedIndex])
         }
@@ -157,8 +198,17 @@ final class SwitcherController: ObservableObject {
     }
 
     private func cancel() {
-        hidePanel()
+        endPresentation()
         windows = []
+    }
+
+    /// Tears down any pending timer and hides the HUD, returning to idle. Safe
+    /// whether or not the HUD was ever shown (quick switch vs. browsed).
+    private func endPresentation() {
+        presentationTask?.cancel()
+        presentationTask = nil
+        isPanelPresented = false
+        hidePanel()
     }
 
     private func loadThumbnails() {
