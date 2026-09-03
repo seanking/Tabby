@@ -9,6 +9,9 @@ final class EventTapManager {
     var onActivate: (() -> Void)?
     var onAdvance: ((_ reverse: Bool) -> Void)?
     var onCommandReleased: (() -> Void)?
+    /// Fired when the user explicitly confirms the current selection with
+    /// Return/Enter (as opposed to committing by releasing Cmd).
+    var onSelect: (() -> Void)?
     var onEscape: (() -> Void)?
     var onHideSelected: (() -> Void)?
     var onQuitSelected: (() -> Void)?
@@ -96,6 +99,15 @@ final class EventTapManager {
             if isSwitcherActive, keyCode == kVK_Escape {
                 isSwitcherActive = false
                 onEscape?()
+                return nil
+            }
+
+            // Return/Enter explicitly commits the current selection so it works
+            // even when the user has let go of Cmd and is navigating with the
+            // arrow keys. Swallowed so it doesn't leak to the app behind the HUD.
+            if isSwitcherActive, keyCode == kVK_Return || keyCode == kVK_ANSI_KeypadEnter {
+                isSwitcherActive = false
+                onSelect?()
                 return nil
             }
 

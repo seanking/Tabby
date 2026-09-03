@@ -33,6 +33,7 @@ final class SwitcherController: ObservableObject {
         eventTap.onActivate = { [weak self] in self?.activate() }
         eventTap.onAdvance = { [weak self] reverse in self?.advance(reverse: reverse) }
         eventTap.onCommandReleased = { [weak self] in self?.commit() }
+        eventTap.onSelect = { [weak self] in self?.commit() }
         eventTap.onEscape = { [weak self] in self?.cancel() }
         eventTap.onHideSelected = { [weak self] in self?.hideSelected() }
         eventTap.onQuitSelected = { [weak self] in self?.quitSelected() }
