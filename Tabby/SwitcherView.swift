@@ -73,13 +73,13 @@ struct SwitcherView: View {
             .overlay(alignment: .bottom) {
                 if canScrollDown { scrollChevron(up: false) }
             }
-            .onChange(of: controller.selectedIndex) { newValue in
+            .onChange(of: controller.selectedIndex) { _, newValue in
                 guard controller.windows.indices.contains(newValue) else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
                     proxy.scrollTo(controller.windows[newValue].id, anchor: .center)
                 }
             }
-            .onChange(of: controller.previewWindowID) { newValue in
+            .onChange(of: controller.previewWindowID) { _, newValue in
                 guard let id = newValue else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
                     proxy.scrollTo(id, anchor: .center)

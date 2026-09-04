@@ -323,7 +323,7 @@ final class WindowManager: Sendable {
         // A hidden app (⌘H) won't show its windows on activate alone — unhide
         // first so the raised window actually becomes visible. No-op otherwise.
         app?.unhide()
-        app?.activate(options: [.activateIgnoringOtherApps])
+        app?.activate()
 
         guard let axWindow = axWindowsByID(for: window.pid)[window.id] else { return }
         // Restore the window if it was minimized, then raise/focus it.
