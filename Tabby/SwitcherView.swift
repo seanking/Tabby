@@ -3,6 +3,7 @@ import SwiftUI
 struct SwitcherView: View {
     @ObservedObject var controller: SwitcherController
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
+    @AppStorage(SettingsKey.fontSize) private var fontSize = SettingsKey.defaultFontSize
 
     private let iconSize: CGFloat = 26
     private let spacing: CGFloat = 4
@@ -185,7 +186,9 @@ struct SwitcherView: View {
 
     private var maxColumnHeight: CGFloat {
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
-        let rowHeight = iconSize + 8
+        // A row is as tall as the larger of the icon and the (possibly enlarged)
+        // name text, so the panel reserves enough height for big font sizes.
+        let rowHeight = max(iconSize, (fontSize * 1.35).rounded(.up)) + 8
         var naturalHeight = CGFloat(controller.windows.count) * (rowHeight + spacing) + spacing + 24
         // Reserve room for the inline preview so the panel grows to fit it.
         if previewVisible {
@@ -211,7 +214,7 @@ struct SwitcherView: View {
     /// Measured against the full, unfiltered list so filtering can't change the
     /// HUD's width — narrowing the rows must never resize the panel horizontally.
     private var nameColumnWidth: CGFloat {
-        let font = NSFont.preferredFont(forTextStyle: .body)
+        let font = NSFont.systemFont(ofSize: fontSize)
         let attributes: [NSAttributedString.Key: Any] = [.font: font]
 
         let widest = controller.allWindows.reduce(CGFloat(0)) { widest, window in
@@ -260,6 +263,8 @@ private struct WindowRow: View {
 
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
+    @AppStorage(SettingsKey.fontSize) private var fontSize = SettingsKey.defaultFontSize
+    @AppStorage(SettingsKey.badgeSize) private var badgeSize = SettingsKey.defaultBadgeSize
 
     private var displayName: String {
         switcherDisplayName(for: window, showAppName: showAppName)
@@ -287,7 +292,7 @@ private struct WindowRow: View {
             .overlay(alignment: .topTrailing) {
                 if showBadges, let badge, !badge.isEmpty {
                     Text(badge)
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: badgeSize, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
@@ -298,7 +303,7 @@ private struct WindowRow: View {
             }
 
             Text(displayName)
-                .font(.body)
+                .font(.system(size: fontSize))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .foregroundStyle(Color.black)

@@ -9,6 +9,8 @@ enum SettingsKey {
     static let showWindowPreview = "showWindowPreview"
     static let previewDwell = "previewDwell"
     static let activationDelay = "activationDelay"
+    static let fontSize = "fontSize"
+    static let badgeSize = "badgeSize"
 
     /// Default dwell (seconds) before the window preview appears. Shared so the
     /// settings UI and the switcher agree when no value has been stored yet.
@@ -18,6 +20,13 @@ enum SettingsKey {
     /// Cmd+Tab. Releasing Cmd within this window is a quick switch. Shared so the
     /// settings UI and the switcher agree when no value has been stored yet.
     static let defaultActivationDelay = 0.4
+
+    /// Default point size for the switcher's window-name labels. Matches the
+    /// system body text size the switcher used before the size was configurable.
+    static let defaultFontSize = 13.0
+
+    /// Default point size for the notification-count badges on switcher icons.
+    static let defaultBadgeSize = 9.0
 }
 
 /// The Tabby preferences window. All options live in a single grouped form so
@@ -130,6 +139,8 @@ private struct GeneralSettingsPane: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
     @AppStorage(SettingsKey.activationDelay) private var activationDelay = SettingsKey.defaultActivationDelay
+    @AppStorage(SettingsKey.fontSize) private var fontSize = SettingsKey.defaultFontSize
+    @AppStorage(SettingsKey.badgeSize) private var badgeSize = SettingsKey.defaultBadgeSize
     @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
@@ -162,6 +173,16 @@ private struct GeneralSettingsPane: View {
         Section("Appearance") {
             Toggle("Show app name", isOn: $showAppName)
             Toggle("Show badges on icons", isOn: $showBadges)
+
+            Stepper(value: $fontSize, in: 11...28, step: 1) {
+                LabeledContent("Font size", value: "\(Int(fontSize)) pt")
+            }
+
+            if showBadges {
+                Stepper(value: $badgeSize, in: 7...20, step: 1) {
+                    LabeledContent("Badge size", value: "\(Int(badgeSize)) pt")
+                }
+            }
         }
     }
 
