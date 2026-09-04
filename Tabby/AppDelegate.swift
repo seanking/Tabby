@@ -72,17 +72,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func openSettings() {
         if settingsWindow == nil {
-            let hosting = NSHostingController(rootView: SettingsView())
-            let window = NSWindow(contentViewController: hosting)
+            let window = NSWindow(contentViewController: makeSettingsTabController())
             window.title = "Tabby Settings"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.center()
+            // Don't let a text field grab focus when the window opens, so the
+            // switcher size/delay fields start unfocused.
+            window.initialFirstResponder = nil
             settingsWindow = window
         }
 
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+        // Clear any first responder AppKit assigned while becoming key, so no
+        // field shows a focus ring / cursor until the user clicks into one.
+        settingsWindow?.makeFirstResponder(nil)
     }
 
     @objc private func quit() {
