@@ -8,10 +8,16 @@ enum SettingsKey {
     static let showBadges = "showBadges"
     static let showWindowPreview = "showWindowPreview"
     static let previewDwell = "previewDwell"
+    static let activationDelay = "activationDelay"
 
     /// Default dwell (seconds) before the window preview appears. Shared so the
     /// settings UI and the switcher agree when no value has been stored yet.
     static let defaultPreviewDwell = 1.0
+
+    /// Default delay (seconds) before the switcher HUD appears on the first
+    /// Cmd+Tab. Releasing Cmd within this window is a quick switch. Shared so the
+    /// settings UI and the switcher agree when no value has been stored yet.
+    static let defaultActivationDelay = 0.4
 }
 
 /// The Tabby preferences window. All options live in a single grouped form so
@@ -123,6 +129,7 @@ private struct PermissionRow: View {
 private struct GeneralSettingsPane: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
+    @AppStorage(SettingsKey.activationDelay) private var activationDelay = SettingsKey.defaultActivationDelay
     @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
@@ -133,11 +140,42 @@ private struct GeneralSettingsPane: View {
             ))
         }
 
+        Section {
+            LabeledContent("Show after") {
+                HStack(spacing: 6) {
+                    TextField("", value: $activationDelay, formatter: Self.delayFormatter)
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 60)
+                    Text("seconds")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("Switcher")
+        } footer: {
+            Text("How long to hold ⌘ before the switcher appears. A quick ⌘Tab within this delay just switches to the previous window.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+
         Section("Appearance") {
             Toggle("Show app name", isOn: $showAppName)
             Toggle("Show badges on icons", isOn: $showBadges)
         }
     }
+
+    /// Formats and validates the activation-delay field: seconds clamped to a
+    /// sane range so an out-of-bounds entry can't leave the HUD unreachable.
+    private static let delayFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimum = 0.0
+        formatter.maximum = 5.0
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 2
+        return formatter
+    }()
 }
 
 /// Window-preview options: whether to show the preview and how long to dwell.

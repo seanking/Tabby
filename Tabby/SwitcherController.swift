@@ -44,10 +44,12 @@ final class SwitcherController: ObservableObject {
     /// Whether the HUD is currently on screen (vs. an in-flight quick switch).
     private var isPanelPresented = false
 
-    /// How long the first Cmd+Tab waits before showing the HUD. Releasing Cmd
-    /// within this window just switches to the next window — like the system
-    /// switcher — while holding Cmd past it reveals the full list.
-    private static let activationDelay: TimeInterval = 0.4
+    /// How long the first Cmd+Tab waits before showing the HUD, from Settings.
+    /// Releasing Cmd within this window just switches to the next window — like
+    /// the system switcher — while holding Cmd past it reveals the full list.
+    private var activationDelay: TimeInterval {
+        UserDefaults.standard.object(forKey: SettingsKey.activationDelay) as? Double ?? SettingsKey.defaultActivationDelay
+    }
 
     /// Fires the dwell preview if the selection is held long enough.
     private var dwellTask: Task<Void, Never>?
@@ -115,8 +117,8 @@ final class SwitcherController: ObservableObject {
     /// Cmd. Cancelled if Cmd is released (quick switch) or the switch ends.
     private func schedulePresentation() {
         presentationTask?.cancel()
-        presentationTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(Self.activationDelay))
+        presentationTask = Task { [weak self, delay = activationDelay] in
+            try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
             self?.presentPanel()
         }
