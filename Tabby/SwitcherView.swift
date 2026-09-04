@@ -3,9 +3,14 @@ import SwiftUI
 struct SwitcherView: View {
     @ObservedObject var controller: SwitcherController
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
-    @AppStorage(SettingsKey.fontSize) private var fontSize = SettingsKey.defaultFontSize
+    @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
 
-    private let iconSize: CGFloat = 26
+    /// Name-label point size and app-icon side length at the current scale, so
+    /// the "Size" control grows the text and icons together. `fontSize` also
+    /// drives row-height and name-column measurement below.
+    private var fontSize: CGFloat { SettingsKey.baseFontSize * scale }
+    private var iconSize: CGFloat { SettingsKey.baseIconSize * scale }
+
     private let spacing: CGFloat = 4
     private let previewHeight: CGFloat = 200
     private let scrollSpace = "switcherScroll"
@@ -263,8 +268,12 @@ private struct WindowRow: View {
 
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
-    @AppStorage(SettingsKey.fontSize) private var fontSize = SettingsKey.defaultFontSize
-    @AppStorage(SettingsKey.badgeSize) private var badgeSize = SettingsKey.defaultBadgeSize
+    @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
+
+    /// Name-label and badge point sizes derived from the single "Size" scale, so
+    /// one control grows the text, icons, and badges together.
+    private var fontSize: CGFloat { SettingsKey.baseFontSize * scale }
+    private var badgeSize: CGFloat { SettingsKey.baseBadgeSize * scale }
 
     private var displayName: String {
         switcherDisplayName(for: window, showAppName: showAppName)
@@ -294,11 +303,15 @@ private struct WindowRow: View {
                     Text(badge)
                         .font(.system(size: badgeSize, weight: .bold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
+                        .padding(.horizontal, 3 * scale)
+                        .padding(.vertical, 0.5 * scale)
                         .background(Capsule().fill(.red))
                         .fixedSize()
-                        .offset(x: 6, y: -5)
+                        // Center the badge on the icon's top-right corner, Dock-
+                        // style, so it straddles the corner at any size and
+                        // number width instead of floating beyond it.
+                        .alignmentGuide(.top) { $0[VerticalAlignment.center] }
+                        .alignmentGuide(.trailing) { $0[HorizontalAlignment.center] }
                 }
             }
 

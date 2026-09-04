@@ -10,8 +10,7 @@ enum SettingsKey {
     static let showWindowPreview = "showWindowPreview"
     static let previewDwell = "previewDwell"
     static let activationDelay = "activationDelay"
-    static let fontSize = "fontSize"
-    static let badgeSize = "badgeSize"
+    static let uiScale = "uiScale"
 
     /// Default dwell (seconds) before the window preview appears. Shared so the
     /// settings UI and the switcher agree when no value has been stored yet.
@@ -22,12 +21,25 @@ enum SettingsKey {
     /// settings UI and the switcher agree when no value has been stored yet.
     static let defaultActivationDelay = 0.4
 
-    /// Default point size for the switcher's window-name labels. Matches the
-    /// system body text size the switcher used before the size was configurable.
-    static let defaultFontSize = 13.0
+    /// Multiplier applied to the switcher's text and badges. 1.0 renders at the
+    /// baseline sizes below; the Appearance "Size" control scales it up or down.
+    static let defaultScale = 1.0
 
-    /// Default point size for the notification-count badges on switcher icons.
-    static let defaultBadgeSize = 9.0
+    /// Allowed range for `uiScale` (80%–200%), shared by the slider and any
+    /// clamping so a stored value can't push the HUD to an unusable size.
+    static let scaleRange = 0.8...2.0
+
+    /// Baseline point size for the switcher's window-name labels at 100% scale.
+    /// Matches the system body text size the switcher used before scaling.
+    static let baseFontSize = 13.0
+
+    /// Baseline point size for the notification-count badges at 100% scale.
+    /// Badges scale with the "Size" control so they stay pinned to the icon's
+    /// corner like the Dock at any size.
+    static let baseBadgeSize = 7.0
+
+    /// Baseline app-icon side length (points) at 100% scale.
+    static let baseIconSize = 26.0
 }
 
 /// Builds the Tabby preferences window's content as a native AppKit toolbar tab
@@ -314,13 +326,12 @@ private struct GeneralSettingsPane: View {
     }()
 }
 
-/// Switcher appearance and window-preview options: label/badge sizing plus
+/// Switcher appearance and window-preview options: text/badge scaling plus
 /// whether to show the preview and how long to dwell.
 private struct PreviewSettingsPane: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
-    @AppStorage(SettingsKey.fontSize) private var fontSize = SettingsKey.defaultFontSize
-    @AppStorage(SettingsKey.badgeSize) private var badgeSize = SettingsKey.defaultBadgeSize
+    @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
     @AppStorage(SettingsKey.showWindowPreview) private var showWindowPreview = true
     @AppStorage(SettingsKey.previewDwell) private var previewDwell = SettingsKey.defaultPreviewDwell
 
@@ -330,13 +341,14 @@ private struct PreviewSettingsPane: View {
                 Toggle("Show app name", isOn: $showAppName)
                 Toggle("Show badges on icons", isOn: $showBadges)
 
-                LabeledContent("Font size") {
-                    numericField(value: $fontSize, range: 11...28, step: 1, unit: "pt", formatter: Self.fontSizeFormatter)
-                }
-
-                if showBadges {
-                    LabeledContent("Badge size") {
-                        numericField(value: $badgeSize, range: 7...20, step: 1, unit: "pt", formatter: Self.badgeSizeFormatter)
+                LabeledContent("Size") {
+                    HStack(spacing: 8) {
+                        Slider(value: $scale, in: SettingsKey.scaleRange, step: 0.1)
+                            .frame(width: 140)
+                        Text(scale.formatted(.percent.precision(.fractionLength(0))))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
                     }
                 }
             }
@@ -366,14 +378,6 @@ private struct PreviewSettingsPane: View {
         }
         .formStyle(.grouped)
     }
-
-    /// Whole-point size formatter for the switcher name font (matches the font
-    /// size stepper's range so typed values are clamped the same way).
-    private static let fontSizeFormatter = pointSizeFormatter(min: 11, max: 28)
-
-    /// Whole-point size formatter for the icon badges (matches the badge size
-    /// stepper's range).
-    private static let badgeSizeFormatter = pointSizeFormatter(min: 7, max: 20)
 
     /// Formats and validates the dwell text field: one/two-decimal seconds,
     /// clamped to a sane range so an out-of-bounds entry can't break the delay.
@@ -409,19 +413,6 @@ private func numericField(
         Stepper("", value: value, in: range, step: step)
             .labelsHidden()
     }
-}
-
-/// Builds a formatter that accepts a whole number of points within a range,
-/// rejecting fractions and out-of-bounds entries.
-private func pointSizeFormatter(min: Double, max: Double) -> NumberFormatter {
-    let formatter = NumberFormatter()
-    formatter.numberStyle = .decimal
-    formatter.minimum = NSNumber(value: min)
-    formatter.maximum = NSNumber(value: max)
-    formatter.minimumFractionDigits = 0
-    formatter.maximumFractionDigits = 0
-    formatter.allowsFloats = false
-    return formatter
 }
 
 // Canvas preview only. The real window uses the native AppKit toolbar tabs built
