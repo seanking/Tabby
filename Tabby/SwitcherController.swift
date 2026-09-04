@@ -355,6 +355,10 @@ final class SwitcherController: ObservableObject {
         filterText = ""
         allWindows = []
         isPanelPresented = false
+        // Clear the tap's session flags too, so a switch that ends here (rather
+        // than via a Return/Esc/Cmd-release keystroke the tap sees) can't leave
+        // stale filter/latch state to block the next session's commit.
+        eventTap.endSession()
         hidePanel()
     }
 

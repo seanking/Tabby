@@ -70,6 +70,16 @@ final class EventTapManager {
         CGEvent.tapEnable(tap: tap, enable: true)
     }
 
+    /// Clears all in-session state so the next Cmd+Tab starts clean. Called by
+    /// the controller whenever a switch ends, covering exits the tap doesn't
+    /// observe as a keystroke (e.g. quitting the last window of a filtered app,
+    /// which dismisses the HUD from the controller rather than via Return/Esc).
+    func endSession() {
+        isSwitcherActive = false
+        isFiltering = false
+        isLatched = false
+    }
+
     func stop() {
         if let eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
@@ -214,8 +224,14 @@ final class EventTapManager {
         characters: String? = nil
     ) -> KeyDecision {
         if command, keyCode == kVK_Tab {
-            let action: KeyDecision.Action = isSwitcherActive ? .advance(reverse: shift) : .activate
-            return KeyDecision(action: action, swallow: true, isSwitcherActive: true, isFiltering: isFiltering, isLatched: isLatched)
+            // Advancing within a live session carries the current filter/latch
+            // state forward. Starting a *fresh* switch must not: a new session
+            // begins unfiltered and unlatched, so stale flags from a prior
+            // session can't linger and swallow this session's Cmd-release commit.
+            guard isSwitcherActive else {
+                return KeyDecision(action: .activate, swallow: true, isSwitcherActive: true)
+            }
+            return KeyDecision(action: .advance(reverse: shift), swallow: true, isSwitcherActive: true, isFiltering: isFiltering, isLatched: isLatched)
         }
 
         // Only Cmd+Tab is intercepted when the switcher isn't open.

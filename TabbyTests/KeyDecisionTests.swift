@@ -221,6 +221,23 @@ struct KeyDecisionTests {
         #expect(decide(kVK_Tab, command: true, active: true).isLatched == false)
     }
 
+    @Test func freshCommandTabClearsStaleFilterAndLatch() {
+        // Starting a new switch must not inherit filter/latch state stranded by a
+        // prior session — otherwise releasing Cmd is swallowed and the selection
+        // never commits.
+        let decision = decide(kVK_Tab, command: true, active: false, filtering: true, latched: true)
+        #expect(decision == Decision(action: .activate, swallow: true, isSwitcherActive: true))
+        #expect(decision.isFiltering == false)
+        #expect(decision.isLatched == false)
+    }
+
+    @Test func advancingWithinSessionKeepsFilterAndLatch() {
+        // A second Tab while already switching stays in the same session, so the
+        // active filter/latch state carries forward.
+        let decision = decide(kVK_Tab, command: true, active: true, filtering: true, latched: true)
+        #expect(decision == Decision(action: .advance(reverse: false), swallow: true, isSwitcherActive: true, isFiltering: true, isLatched: true))
+    }
+
     @Test func latchIsCarriedForwardByLaterKeys() {
         // Cmd+H without an existing latch leaves it clear...
         #expect(decide(kVK_ANSI_H, command: true, active: true, filtering: false).isLatched == false)
