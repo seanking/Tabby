@@ -17,6 +17,17 @@ final class SwitcherController: ObservableObject {
     /// the dwell delay elapses without the selection changing.
     @Published private(set) var previewWindowID: CGWindowID?
 
+    /// Whether the filter field is showing (toggled on by Cmd+F).
+    @Published private(set) var filterActive = false
+    /// The current filter query typed by the user.
+    @Published private(set) var filterText = ""
+
+    /// The full, unfiltered window list captured at activation. `windows` holds
+    /// the currently displayed (possibly filtered) subset. Exposed so the view
+    /// can size the list to the full set, keeping the HUD's width fixed while
+    /// filtering narrows the visible rows.
+    @Published private(set) var allWindows: [WindowInfo] = []
+
     /// Last successful window snapshot per window id, kept across Cmd+Tab
     /// invocations. Lets hidden/minimized windows — which can't be captured live —
     /// show their most recent on-screen image instead of just an icon. Pruned to
@@ -62,6 +73,9 @@ final class SwitcherController: ObservableObject {
         eventTap.onQuitSelected = { [weak self] in self?.quitSelected() }
         eventTap.onMinimizeSelected = { [weak self] in self?.minimizeSelected() }
         eventTap.onTogglePreview = { [weak self] in self?.togglePreview() }
+        eventTap.onFilterActivate = { [weak self] in self?.activateFilter() }
+        eventTap.onFilterInput = { [weak self] text in self?.appendFilter(text) }
+        eventTap.onFilterBackspace = { [weak self] in self?.deleteFilterCharacter() }
         eventTap.start()
     }
 
@@ -73,6 +87,9 @@ final class SwitcherController: ObservableObject {
         let list = windowManager.listWindows()
         guard list.count > 1 else { return }
 
+        allWindows = list
+        filterActive = false
+        filterText = ""
         windows = list
         icons = Dictionary(uniqueKeysWithValues: Set(list.map(\.pid)).compactMap { pid in
             windowManager.icon(for: pid).map { (pid, $0) }
@@ -155,6 +172,54 @@ final class SwitcherController: ObservableObject {
             resizePanelKeepingLeftEdge()
         } else {
             showDwellPreview()
+        }
+    }
+
+    // MARK: - Filter
+
+    /// Cmd+F: reveal the HUD immediately (skipping the activation delay) and turn
+    /// on the filter. Any dwell preview is dismissed so the list is unobstructed
+    /// while typing.
+    private func activateFilter() {
+        presentPanel()
+        guard !filterActive else { return }
+        dwellTask?.cancel()
+        if previewWindowID != nil { previewWindowID = nil }
+        filterActive = true
+        resizePanelKeepingLeftEdge()
+    }
+
+    /// Appends typed text to the filter query and re-applies it.
+    private func appendFilter(_ text: String) {
+        guard filterActive else { return }
+        filterText += text
+        applyFilter()
+    }
+
+    /// Removes the last character from the filter query (Delete/Backspace).
+    private func deleteFilterCharacter() {
+        guard filterActive, !filterText.isEmpty else { return }
+        filterText.removeLast()
+        applyFilter()
+    }
+
+    /// Recomputes the displayed list from the full snapshot and the current
+    /// query, keeping the selection on the first match, then re-fits the panel.
+    private func applyFilter() {
+        windows = Self.filter(allWindows, query: filterText)
+        selectedIndex = 0
+        resizePanelKeepingLeftEdge()
+    }
+
+    /// Filters `windows` to those whose app name or window title contains
+    /// `query` (case- and diacritic-insensitive). An empty query matches all.
+    /// Pure and nonisolated so it can be unit-tested off the main actor.
+    nonisolated static func filter(_ windows: [WindowInfo], query: String) -> [WindowInfo] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return windows }
+        return windows.filter { window in
+            window.ownerName.localizedCaseInsensitiveContains(trimmed) ||
+            window.title.localizedCaseInsensitiveContains(trimmed)
         }
     }
 
@@ -286,6 +351,9 @@ final class SwitcherController: ObservableObject {
         dwellTask?.cancel()
         dwellTask = nil
         previewWindowID = nil
+        filterActive = false
+        filterText = ""
+        allWindows = []
         isPanelPresented = false
         hidePanel()
     }

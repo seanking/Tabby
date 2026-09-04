@@ -16,7 +16,11 @@ struct SwitcherView: View {
     @State private var bottomEdgeY: CGFloat = 0
 
     var body: some View {
-        ScrollViewReader { proxy in
+        VStack(spacing: 0) {
+            if controller.filterActive {
+                filterBar
+            }
+            ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: spacing) {
                     ForEach(Array(controller.windows.enumerated()), id: \.element.id) { index, window in
@@ -81,6 +85,7 @@ struct SwitcherView: View {
                     proxy.scrollTo(id, anchor: .center)
                 }
             }
+            }
         }
         .background(
             VisualEffectBackground(
@@ -95,6 +100,33 @@ struct SwitcherView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .fixedSize()
+    }
+
+    /// The filter field pinned above the list while Cmd+F filtering is active.
+    /// Input is fed in through the event tap (the panel can't take key focus), so
+    /// this only mirrors the current query rather than being an editable field.
+    private var filterBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            Text(controller.filterText.isEmpty ? "Filter" : controller.filterText)
+                .foregroundStyle(controller.filterText.isEmpty ? Color.secondary : Color.black)
+                .lineLimit(1)
+                .truncationMode(.head)
+            Spacer(minLength: 0)
+        }
+        .font(.body)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        // Match the rows' content width so the field aligns with them and a long
+        // query truncates instead of widening the HUD.
+        .frame(width: rowContentWidth, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.18))
+        )
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
     }
 
     /// Whether rows extend above the visible area (something scrolled off the top):
@@ -176,11 +208,13 @@ struct SwitcherView: View {
 
     /// Width of the name column, sized to the longest label so nothing is
     /// truncated, but capped at half the screen width for extreme titles.
+    /// Measured against the full, unfiltered list so filtering can't change the
+    /// HUD's width — narrowing the rows must never resize the panel horizontally.
     private var nameColumnWidth: CGFloat {
         let font = NSFont.preferredFont(forTextStyle: .body)
         let attributes: [NSAttributedString.Key: Any] = [.font: font]
 
-        let widest = controller.windows.reduce(CGFloat(0)) { widest, window in
+        let widest = controller.allWindows.reduce(CGFloat(0)) { widest, window in
             let name = switcherDisplayName(for: window, showAppName: showAppName)
             let width = (name as NSString).size(withAttributes: attributes).width
             return max(widest, width)

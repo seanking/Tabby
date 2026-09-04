@@ -10,6 +10,37 @@ struct ListTransformTests {
         WindowInfo(id: id, pid: pid, ownerName: "App\(pid)", title: "t", bounds: .zero)
     }
 
+    private func window(_ id: CGWindowID, owner: String, title: String) -> WindowInfo {
+        WindowInfo(id: id, pid: pid_t(id), ownerName: owner, title: title, bounds: .zero)
+    }
+
+    // MARK: filter
+
+    @Test func emptyQueryReturnsEverything() {
+        let windows = [window(1, owner: "Safari", title: "Home"), window(2, owner: "Xcode", title: "main")]
+        #expect(SwitcherController.filter(windows, query: "   ").map(\.id) == [1, 2])
+    }
+
+    @Test func filterMatchesAppName() {
+        let windows = [window(1, owner: "Safari", title: "Home"), window(2, owner: "Xcode", title: "main")]
+        #expect(SwitcherController.filter(windows, query: "xco").map(\.id) == [2])
+    }
+
+    @Test func filterMatchesWindowTitle() {
+        let windows = [window(1, owner: "Safari", title: "Inbox"), window(2, owner: "Xcode", title: "main")]
+        #expect(SwitcherController.filter(windows, query: "inbox").map(\.id) == [1])
+    }
+
+    @Test func filterIsCaseInsensitive() {
+        let windows = [window(1, owner: "Safari", title: "Home")]
+        #expect(SwitcherController.filter(windows, query: "SAFARI").map(\.id) == [1])
+    }
+
+    @Test func filterWithNoMatchesIsEmpty() {
+        let windows = [window(1, owner: "Safari", title: "Home")]
+        #expect(SwitcherController.filter(windows, query: "zzz").isEmpty)
+    }
+
     // MARK: markingHidden
 
     @Test func markingHiddenGraysEveryWindowOfApp() {

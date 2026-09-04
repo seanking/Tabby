@@ -18,8 +18,23 @@ final class EventTapManager {
     var onMinimizeSelected: (() -> Void)?
     /// Fired when the user presses "P" while switching to show/hide the preview.
     var onTogglePreview: (() -> Void)?
+    /// Fired when the user presses Cmd+F while switching to reveal the filter.
+    var onFilterActivate: (() -> Void)?
+    /// Fired for each character typed into the filter (already the resolved,
+    /// modifier-applied string, e.g. "a").
+    var onFilterInput: ((_ text: String) -> Void)?
+    /// Fired when Delete/Backspace is pressed while filtering.
+    var onFilterBackspace: (() -> Void)?
 
     private(set) var isSwitcherActive = false
+    /// Whether the filter field is active. Once true, releasing Cmd no longer
+    /// commits — the filter owns dismissal (Esc cancels, Return selects).
+    private(set) var isFiltering = false
+    /// Whether the user has started browsing with the arrow keys. Like filtering,
+    /// this latches the HUD open so releasing Cmd no longer commits — the user
+    /// picks explicitly with Return (or cancels with Esc). Cmd+Tab does not latch,
+    /// so the classic hold-Cmd / release-to-commit quick switch is unaffected.
+    private(set) var isLatched = false
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -65,6 +80,8 @@ final class EventTapManager {
         eventTap = nil
         runLoopSource = nil
         isSwitcherActive = false
+        isFiltering = false
+        isLatched = false
     }
 
     private func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -77,6 +94,10 @@ final class EventTapManager {
 
         if type == .flagsChanged {
             if isSwitcherActive, !event.flags.contains(.maskCommand) {
+                // Once filtering or arrow-browsing has begun, releasing Cmd keeps
+                // the list on screen — the user dismisses explicitly with Return
+                // or Esc rather than by letting go of Cmd.
+                if isFiltering || isLatched { return Unmanaged.passRetained(event) }
                 isSwitcherActive = false
                 onCommandReleased?()
             }
@@ -84,74 +105,197 @@ final class EventTapManager {
         }
 
         if type == .keyDown {
-            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
             let flags = event.flags
+            let decision = Self.decideKeyDown(
+                keyCode: Int(event.getIntegerValueField(.keyboardEventKeycode)),
+                command: flags.contains(.maskCommand),
+                shift: flags.contains(.maskShift),
+                isSwitcherActive: isSwitcherActive,
+                isFiltering: isFiltering,
+                isLatched: isLatched,
+                characters: NSEvent(cgEvent: event)?.characters
+            )
 
-            if flags.contains(.maskCommand), keyCode == kVK_Tab {
-                let reverse = flags.contains(.maskShift)
-                if isSwitcherActive {
-                    onAdvance?(reverse)
-                } else {
-                    isSwitcherActive = true
-                    onActivate?()
-                }
-                return nil // swallow — prevents the system app switcher from also firing
+            isSwitcherActive = decision.isSwitcherActive
+            isFiltering = decision.isFiltering
+            isLatched = decision.isLatched
+
+            switch decision.action {
+            case .none: break
+            case .activate: onActivate?()
+            case .advance(let reverse): onAdvance?(reverse)
+            case .select: onSelect?()
+            case .escape: onEscape?()
+            case .hideSelected: onHideSelected?()
+            case .quitSelected: onQuitSelected?()
+            case .minimizeSelected: onMinimizeSelected?()
+            case .togglePreview: onTogglePreview?()
+            case .filterActivate: onFilterActivate?()
+            case .filterInput(let text): onFilterInput?(text)
+            case .filterBackspace: onFilterBackspace?()
             }
 
-            if isSwitcherActive, keyCode == kVK_Escape {
-                isSwitcherActive = false
-                onEscape?()
-                return nil
-            }
-
-            // Return/Enter explicitly commits the current selection so it works
-            // even when the user has let go of Cmd and is navigating with the
-            // arrow keys. Swallowed so it doesn't leak to the app behind the HUD.
-            if isSwitcherActive, keyCode == kVK_Return || keyCode == kVK_ANSI_KeypadEnter {
-                isSwitcherActive = false
-                onSelect?()
-                return nil
-            }
-
-            // Arrow keys traverse the (vertical) list: Down/Right → next,
-            // Up/Left → previous. Swallowed so they don't reach other apps.
-            if isSwitcherActive {
-                switch Int(keyCode) {
-                case kVK_DownArrow, kVK_RightArrow:
-                    onAdvance?(false)
-                    return nil
-                case kVK_UpArrow, kVK_LeftArrow:
-                    onAdvance?(true)
-                    return nil
-                case kVK_ANSI_P:
-                    onTogglePreview?()
-                    return nil
-                default:
-                    break
-                }
-            }
-
-            // While switching, Cmd+H / Cmd+Q act on the *selected* window's app
-            // rather than the frontmost one; swallow so they don't also fire on
-            // whatever app is currently active. Cmd stays held, so the switcher
-            // remains open.
-            if isSwitcherActive, flags.contains(.maskCommand) {
-                if keyCode == kVK_ANSI_H {
-                    onHideSelected?()
-                    return nil
-                }
-                if keyCode == kVK_ANSI_Q {
-                    onQuitSelected?()
-                    return nil
-                }
-                if keyCode == kVK_ANSI_M {
-                    onMinimizeSelected?()
-                    return nil
-                }
-            }
+            // Swallowed keys (return nil) don't reach the app behind the HUD nor
+            // the system's own Cmd+Tab switcher.
+            return decision.swallow ? nil : Unmanaged.passRetained(event)
         }
 
         return Unmanaged.passRetained(event)
+    }
+
+    /// The result of interpreting a keyDown while the switcher may be active:
+    /// which callback to fire, whether to swallow the event, and the resulting
+    /// active state. Pure and separated from `CGEvent` so it can be unit-tested.
+    struct KeyDecision: Equatable {
+        enum Action: Equatable {
+            case none
+            case activate
+            case advance(reverse: Bool)
+            case select
+            case escape
+            case hideSelected
+            case quitSelected
+            case minimizeSelected
+            case togglePreview
+            case filterActivate
+            case filterInput(String)
+            case filterBackspace
+        }
+
+        var action: Action
+        var swallow: Bool
+        var isSwitcherActive: Bool
+        /// Whether the filter remains active after this key. Defaults to false so
+        /// call sites (and tests) that predate the filter stay unchanged.
+        var isFiltering: Bool
+        /// Whether arrow-browsing has latched the HUD open, so releasing Cmd no
+        /// longer commits. Defaults to false to keep older call sites unchanged.
+        var isLatched: Bool
+
+        init(
+            action: Action,
+            swallow: Bool,
+            isSwitcherActive: Bool,
+            isFiltering: Bool = false,
+            isLatched: Bool = false
+        ) {
+            self.action = action
+            self.swallow = swallow
+            self.isSwitcherActive = isSwitcherActive
+            self.isFiltering = isFiltering
+            self.isLatched = isLatched
+        }
+    }
+
+    /// Maps a keyDown (keycode + Cmd/Shift state + current active state) to the
+    /// switcher action, mirroring the routing the live event tap performs:
+    ///
+    /// - Cmd+Tab activates (or, if already switching, advances — Shift reverses),
+    ///   always swallowed so the system switcher never fires.
+    /// - While switching: Esc cancels, Return/Enter commits, the arrow keys
+    ///   advance/retreat, "P" toggles the preview, and Cmd+H/Q/M act on the
+    ///   selected window — all swallowed. Everything else passes through.
+    /// - Cmd+F opens the filter. Once filtering, printable keys build the query,
+    ///   Delete removes a character, the up/down arrows still navigate, and every
+    ///   key is swallowed so nothing leaks to the app behind the HUD. The "P"
+    ///   preview shortcut and the left/right arrows step aside so those letters
+    ///   can be typed instead.
+    /// - Pressing any arrow key latches the HUD open (`isLatched`) so releasing
+    ///   Cmd no longer commits; Cmd+Tab deliberately does not, preserving the
+    ///   classic hold-and-release quick switch. Other in-switcher keys carry the
+    ///   latched state forward unchanged.
+    static func decideKeyDown(
+        keyCode: Int,
+        command: Bool,
+        shift: Bool,
+        isSwitcherActive: Bool,
+        isFiltering: Bool = false,
+        isLatched: Bool = false,
+        characters: String? = nil
+    ) -> KeyDecision {
+        if command, keyCode == kVK_Tab {
+            let action: KeyDecision.Action = isSwitcherActive ? .advance(reverse: shift) : .activate
+            return KeyDecision(action: action, swallow: true, isSwitcherActive: true, isFiltering: isFiltering, isLatched: isLatched)
+        }
+
+        // Only Cmd+Tab is intercepted when the switcher isn't open.
+        guard isSwitcherActive else {
+            return KeyDecision(action: .none, swallow: false, isSwitcherActive: false)
+        }
+
+        // Cmd+F reveals the filter; a repeat while filtering is a no-op (but is
+        // still swallowed so it never types an "f").
+        if command, keyCode == kVK_ANSI_F {
+            return KeyDecision(
+                action: isFiltering ? .none : .filterActivate,
+                swallow: true,
+                isSwitcherActive: true,
+                isFiltering: true,
+                isLatched: isLatched
+            )
+        }
+
+        switch keyCode {
+        case kVK_Escape:
+            return KeyDecision(action: .escape, swallow: true, isSwitcherActive: false)
+        case kVK_Return, kVK_ANSI_KeypadEnter:
+            return KeyDecision(action: .select, swallow: true, isSwitcherActive: false)
+        case kVK_DownArrow:
+            return KeyDecision(action: .advance(reverse: false), swallow: true, isSwitcherActive: true, isFiltering: isFiltering, isLatched: true)
+        case kVK_UpArrow:
+            return KeyDecision(action: .advance(reverse: true), swallow: true, isSwitcherActive: true, isFiltering: isFiltering, isLatched: true)
+        default:
+            break
+        }
+
+        // Left/right arrows and the "P" preview toggle only apply outside the
+        // filter, where their letters aren't wanted as query text.
+        if !isFiltering {
+            switch keyCode {
+            case kVK_RightArrow:
+                return KeyDecision(action: .advance(reverse: false), swallow: true, isSwitcherActive: true, isLatched: true)
+            case kVK_LeftArrow:
+                return KeyDecision(action: .advance(reverse: true), swallow: true, isSwitcherActive: true, isLatched: true)
+            case kVK_ANSI_P:
+                return KeyDecision(action: .togglePreview, swallow: true, isSwitcherActive: true, isLatched: isLatched)
+            default:
+                break
+            }
+        }
+
+        if command {
+            switch keyCode {
+            case kVK_ANSI_H:
+                return KeyDecision(action: .hideSelected, swallow: true, isSwitcherActive: true, isFiltering: isFiltering, isLatched: isLatched)
+            case kVK_ANSI_Q:
+                return KeyDecision(action: .quitSelected, swallow: true, isSwitcherActive: true, isFiltering: isFiltering, isLatched: isLatched)
+            case kVK_ANSI_M:
+                return KeyDecision(action: .minimizeSelected, swallow: true, isSwitcherActive: true, isFiltering: isFiltering, isLatched: isLatched)
+            default:
+                break
+            }
+        }
+
+        // Filter text entry: Delete edits, printable keys extend the query, and
+        // anything else is swallowed so it can't reach the app underneath.
+        if isFiltering {
+            if keyCode == kVK_Delete {
+                return KeyDecision(action: .filterBackspace, swallow: true, isSwitcherActive: true, isFiltering: true, isLatched: isLatched)
+            }
+            if !command, let characters, isPrintable(characters) {
+                return KeyDecision(action: .filterInput(characters), swallow: true, isSwitcherActive: true, isFiltering: true, isLatched: isLatched)
+            }
+            return KeyDecision(action: .none, swallow: true, isSwitcherActive: true, isFiltering: true, isLatched: isLatched)
+        }
+
+        return KeyDecision(action: .none, swallow: false, isSwitcherActive: true, isLatched: isLatched)
+    }
+
+    /// Whether a resolved key string is ordinary text to append to the filter
+    /// (letters, digits, space, punctuation) rather than a control character.
+    private static func isPrintable(_ text: String) -> Bool {
+        guard let scalar = text.unicodeScalars.first else { return false }
+        return scalar.value >= 0x20 && scalar.value != 0x7F
     }
 
     deinit {
