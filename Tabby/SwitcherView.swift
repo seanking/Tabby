@@ -259,6 +259,7 @@ private struct WindowRow: View {
     let nameWidth: CGFloat
 
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
+    @AppStorage(SettingsKey.showBadges) private var showBadges = true
 
     private var displayName: String {
         switcherDisplayName(for: window, showAppName: showAppName)
@@ -284,7 +285,7 @@ private struct WindowRow: View {
             .saturation(isDimmed ? 0 : 1)
             .opacity(isDimmed ? 0.5 : 1)
             .overlay(alignment: .topTrailing) {
-                if let badge, !badge.isEmpty {
+                if showBadges, let badge, !badge.isEmpty {
                     Text(badge)
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white)

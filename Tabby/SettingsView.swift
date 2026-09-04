@@ -5,6 +5,7 @@ import SwiftUI
 /// read the same values.
 enum SettingsKey {
     static let showAppName = "showAppName"
+    static let showBadges = "showBadges"
     static let showWindowPreview = "showWindowPreview"
     static let previewDwell = "previewDwell"
 
@@ -121,6 +122,7 @@ private struct PermissionRow: View {
 /// General options: launch behavior and switcher appearance.
 private struct GeneralSettingsPane: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
+    @AppStorage(SettingsKey.showBadges) private var showBadges = true
     @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
@@ -133,6 +135,7 @@ private struct GeneralSettingsPane: View {
 
         Section("Appearance") {
             Toggle("Show app name", isOn: $showAppName)
+            Toggle("Show badges on icons", isOn: $showBadges)
         }
     }
 }
