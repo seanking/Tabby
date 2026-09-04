@@ -44,6 +44,129 @@ struct SettingsView: View {
     }
 }
 
+/// First-launch onboarding. Explains the two macOS permissions Tabby relies on
+/// and why, and lets the user grant them before using the switcher. Shown once
+/// (see `AppDelegate`); afterwards the same controls live in Settings →
+/// Permissions. Status is polled while visible so the buttons update the moment
+/// the user flips a switch in System Settings.
+struct WelcomeView: View {
+    /// Called when the user dismisses the welcome window.
+    var onDone: () -> Void
+
+    @State private var accessibilityGranted = Permissions.isAccessibilityTrusted(prompt: false)
+    @State private var screenRecordingGranted = Permissions.isScreenRecordingGranted()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Welcome to Tabby")
+                    .font(.largeTitle.bold())
+                Text("Tabby replaces ⌘Tab with a window switcher. It needs a couple of macOS permissions to work — you can grant them now or later from Settings.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(spacing: 0) {
+                WelcomePermissionRow(
+                    title: "Accessibility",
+                    detail: "Required to intercept ⌘Tab and raise the window you pick.",
+                    granted: accessibilityGranted,
+                    grant: grantAccessibility,
+                    openSettings: Permissions.openAccessibilitySettings
+                )
+                Divider()
+                WelcomePermissionRow(
+                    title: "Screen Recording",
+                    detail: "Optional — used only for live window previews. The switcher works without it.",
+                    granted: screenRecordingGranted,
+                    grant: grantScreenRecording,
+                    openSettings: Permissions.openScreenRecordingSettings
+                )
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+
+            HStack {
+                if !accessibilityGranted {
+                    Text("Tabby will start switching as soon as Accessibility is granted.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button(accessibilityGranted ? "Get Started" : "Continue", action: onDone)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 460)
+        .task { await pollStatus() }
+    }
+
+    private func grantAccessibility() {
+        _ = Permissions.isAccessibilityTrusted(prompt: true)
+        Permissions.openAccessibilitySettings()
+    }
+
+    private func grantScreenRecording() {
+        Permissions.requestScreenRecording()
+        Permissions.openScreenRecordingSettings()
+    }
+
+    /// Refresh the granted flags about once a second while the window is on
+    /// screen so the UI reflects changes made in System Settings without a
+    /// restart.
+    private func pollStatus() async {
+        while !Task.isCancelled {
+            accessibilityGranted = Permissions.isAccessibilityTrusted(prompt: false)
+            screenRecordingGranted = Permissions.isScreenRecordingGranted()
+            try? await Task.sleep(for: .seconds(1))
+        }
+    }
+}
+
+/// A single permission row for the welcome window. Unlike `PermissionRow`, this
+/// uses a plain `HStack` (not `LabeledContent`) so it lays out correctly outside
+/// a grouped `Form`: the title/detail take the flexible left column and the
+/// status badge plus action button keep their natural width on the right.
+private struct WelcomePermissionRow: View {
+    let title: String
+    let detail: String
+    let granted: Bool
+    let grant: () -> Void
+    let openSettings: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 12)
+
+            if granted {
+                Label("Granted", systemImage: "checkmark.circle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(.green)
+                    .fixedSize()
+                Button("Open Settings…", action: openSettings)
+                    .fixedSize()
+            } else {
+                Button("Grant…", action: grant)
+                    .fixedSize()
+            }
+        }
+        .padding(.vertical, 8)
+    }
+}
+
 /// The macOS privacy permissions Tabby depends on, each with its current state
 /// and a button to grant it. Status is polled while the pane is visible so it
 /// updates as soon as the user flips the switch in System Settings.

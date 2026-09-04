@@ -2,11 +2,16 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem!
     private let switcher = SwitcherController()
     private var permissionPollTimer: Timer?
     private var settingsWindow: NSWindow?
+    private var welcomeWindow: NSWindow?
+
+    /// Whether the first-launch welcome/permissions window has been dismissed.
+    /// Persisted so onboarding only appears the first time Tabby runs.
+    private static let welcomeCompletedKey = "didCompleteWelcome"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -17,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !AppDelegate.isRunningTests else { return }
 
         setUpStatusItem()
+        presentWelcomeIfNeeded()
         beginPermissionGate()
     }
 
@@ -81,6 +87,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+
+    // MARK: - First-launch onboarding
+
+    /// On the very first launch, show a window explaining the permissions Tabby
+    /// needs (and why) with buttons to grant them. Subsequent launches skip it;
+    /// the same controls remain available in Settings → Permissions.
+    private func presentWelcomeIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.welcomeCompletedKey) else { return }
+
+        let hosting = NSHostingController(rootView: WelcomeView(onDone: { [weak self] in
+            self?.welcomeWindow?.close()
+        }))
+        let window = NSWindow(contentViewController: hosting)
+        window.title = "Welcome to Tabby"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.center()
+        welcomeWindow = window
+
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Mark onboarding complete once the welcome window is dismissed — whether via
+    /// its button or the close box — so it won't reappear on the next launch.
+    func windowWillClose(_ notification: Notification) {
+        guard (notification.object as? NSWindow) === welcomeWindow else { return }
+        UserDefaults.standard.set(true, forKey: Self.welcomeCompletedKey)
+        welcomeWindow = nil
     }
 
     // MARK: - Permission gate
