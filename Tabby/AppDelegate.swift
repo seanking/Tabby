@@ -47,24 +47,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Tabby", action: nil, keyEquivalent: "").isEnabled = false
         menu.addItem(.separator())
 
-        let accessibilityItem = NSMenuItem(
-            title: "Grant Accessibility Access…",
-            action: #selector(openAccessibilitySettings),
-            keyEquivalent: ""
-        )
-        accessibilityItem.target = self
-        menu.addItem(accessibilityItem)
-
-        let screenRecordingItem = NSMenuItem(
-            title: "Grant Screen Recording Access…",
-            action: #selector(openScreenRecordingSettings),
-            keyEquivalent: ""
-        )
-        screenRecordingItem.target = self
-        menu.addItem(screenRecordingItem)
-
-        menu.addItem(.separator())
-
         let settingsItem = NSMenuItem(
             title: "Settings…",
             action: #selector(openSettings),
@@ -80,17 +62,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
-    }
-
-    @objc private func openAccessibilitySettings() {
-        // Surface the system prompt (also registers the app in the Accessibility
-        // list), then take the user to the relevant Settings pane.
-        _ = Permissions.isAccessibilityTrusted(prompt: true)
-        Permissions.openAccessibilitySettings()
-    }
-
-    @objc private func openScreenRecordingSettings() {
-        Permissions.openScreenRecordingSettings()
     }
 
     @objc private func openSettings() {

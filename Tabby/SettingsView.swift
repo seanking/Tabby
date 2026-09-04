@@ -13,46 +13,158 @@ enum SettingsKey {
     static let defaultPreviewDwell = 1.0
 }
 
-/// The Tabby preferences window. Kept intentionally small — one section per
-/// group of related options.
+/// The Tabby preferences window. All options live in a single grouped form so
+/// there's no toolbar tab strip across the top of the window.
 struct SettingsView: View {
+    var body: some View {
+        Form {
+            GeneralSettingsPane()
+            PreviewSettingsPane()
+            PermissionsSettingsPane()
+        }
+        .formStyle(.grouped)
+        .frame(width: 480)
+        .frame(minHeight: 460)
+    }
+}
+
+/// The macOS privacy permissions Tabby depends on, each with its current state
+/// and a button to grant it. Status is polled while the pane is visible so it
+/// updates as soon as the user flips the switch in System Settings.
+private struct PermissionsSettingsPane: View {
+    @State private var accessibilityGranted = Permissions.isAccessibilityTrusted(prompt: false)
+    @State private var screenRecordingGranted = Permissions.isScreenRecordingGranted()
+
+    var body: some View {
+        Section {
+            PermissionRow(
+                title: "Accessibility",
+                detail: "Required to intercept ⌘Tab and raise windows.",
+                granted: accessibilityGranted,
+                grant: grantAccessibility,
+                openSettings: Permissions.openAccessibilitySettings
+            )
+            PermissionRow(
+                title: "Screen Recording",
+                detail: "Needed for live window previews. Optional.",
+                granted: screenRecordingGranted,
+                grant: grantScreenRecording,
+                openSettings: Permissions.openScreenRecordingSettings
+            )
+        } header: {
+            Text("Permissions")
+        }
+        .task { await pollStatus() }
+    }
+
+    private func grantAccessibility() {
+        // Surface the system prompt (also registers the app in the list), then
+        // take the user to the relevant Settings pane.
+        _ = Permissions.isAccessibilityTrusted(prompt: true)
+        Permissions.openAccessibilitySettings()
+    }
+
+    private func grantScreenRecording() {
+        Permissions.requestScreenRecording()
+        Permissions.openScreenRecordingSettings()
+    }
+
+    /// Refresh the granted flags about once a second while the pane is on screen
+    /// so the UI reflects changes made in System Settings without a restart.
+    private func pollStatus() async {
+        while !Task.isCancelled {
+            accessibilityGranted = Permissions.isAccessibilityTrusted(prompt: false)
+            screenRecordingGranted = Permissions.isScreenRecordingGranted()
+            try? await Task.sleep(for: .seconds(1))
+        }
+    }
+}
+
+/// A single permission row: title and description on the left; on the right a
+/// status badge plus a button that links out to the System Settings pane where
+/// the permission can be enabled or disabled.
+private struct PermissionRow: View {
+    let title: String
+    let detail: String
+    let granted: Bool
+    let grant: () -> Void
+    let openSettings: () -> Void
+
+    var body: some View {
+        LabeledContent {
+            HStack(spacing: 8) {
+                if granted {
+                    Label("Granted", systemImage: "checkmark.circle.fill")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(.green)
+                    // Already granted: just link out so the user can turn it off.
+                    Button("Open Settings…", action: openSettings)
+                } else {
+                    Label("Not granted", systemImage: "exclamationmark.circle.fill")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(.secondary)
+                    // Not granted: prompt and then link out to enable it.
+                    Button("Grant…", action: grant)
+                }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// General options: launch behavior and switcher appearance.
+private struct GeneralSettingsPane: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
-    @AppStorage(SettingsKey.showWindowPreview) private var showWindowPreview = true
-    @AppStorage(SettingsKey.previewDwell) private var previewDwell = SettingsKey.defaultPreviewDwell
     @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
-        Form {
-            Section("Appearance") {
-                Toggle("Show app name", isOn: $showAppName)
-            }
+        Section("Startup") {
+            Toggle("Launch at login", isOn: Binding(
+                get: { launchAtLogin.isEnabled },
+                set: { launchAtLogin.setEnabled($0) }
+            ))
+        }
 
-            Section("Window preview") {
-                Toggle("Show window preview", isOn: $showWindowPreview)
+        Section("Appearance") {
+            Toggle("Show app name", isOn: $showAppName)
+        }
+    }
+}
 
-                if showWindowPreview {
-                    LabeledContent("Show after") {
-                        HStack(spacing: 6) {
-                            TextField("", value: $previewDwell, formatter: Self.dwellFormatter)
-                                .textFieldStyle(.roundedBorder)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 60)
-                            Text("seconds")
-                                .foregroundStyle(.secondary)
-                        }
+/// Window-preview options: whether to show the preview and how long to dwell.
+private struct PreviewSettingsPane: View {
+    @AppStorage(SettingsKey.showWindowPreview) private var showWindowPreview = true
+    @AppStorage(SettingsKey.previewDwell) private var previewDwell = SettingsKey.defaultPreviewDwell
+
+    var body: some View {
+        Section {
+            Toggle("Show window preview", isOn: $showWindowPreview)
+
+            if showWindowPreview {
+                LabeledContent("Show after") {
+                    HStack(spacing: 6) {
+                        TextField("", value: $previewDwell, formatter: Self.dwellFormatter)
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                        Text("seconds")
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
-
-            Section("General") {
-                Toggle("Launch at login", isOn: Binding(
-                    get: { launchAtLogin.isEnabled },
-                    set: { launchAtLogin.setEnabled($0) }
-                ))
-            }
+        } header: {
+            Text("Preview")
+        } footer: {
+            Text("Hold ⌘ on a window to preview it after the delay, or press P while switching.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
-        .formStyle(.grouped)
-        .frame(width: 380, height: 280)
     }
 
     /// Formats and validates the dwell text field: one/two-decimal seconds,

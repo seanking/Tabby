@@ -249,8 +249,9 @@ final class WindowManager: Sendable {
 
     /// Whether a Dock tile's status label is an actual notification count
     /// ("3", "99+") rather than other text a tile can transiently expose (e.g. a
-    /// date), which we don't want to render as a badge.
-    private static func isBadgeCount(_ label: String) -> Bool {
+    /// date), which we don't want to render as a badge. Pure and internal so it
+    /// can be unit-tested.
+    static func isBadgeCount(_ label: String) -> Bool {
         let digits = label.hasSuffix("+") ? label.dropLast() : Substring(label)
         return !digits.isEmpty && digits.allSatisfy(\.isNumber)
     }
