@@ -11,6 +11,7 @@ enum SettingsKey {
     static let previewDwell = "previewDwell"
     static let activationDelay = "activationDelay"
     static let uiScale = "uiScale"
+    static let iconReaction = "iconReaction"
 
     /// Default dwell (seconds) before the window preview appears. Shared so the
     /// settings UI and the switcher agree when no value has been stored yet.
@@ -40,6 +41,32 @@ enum SettingsKey {
 
     /// Baseline app-icon side length (points) at 100% scale.
     static let baseIconSize = 26.0
+}
+
+/// A bit of whimsy: how the selected app icon reacts as you land on it while
+/// switching. Stored by raw value in `UserDefaults` via `@AppStorage`, so the
+/// settings picker and the switcher row agree on the current choice.
+enum IconReaction: String, CaseIterable, Identifiable {
+    /// No animation — the icon simply highlights when selected.
+    case none
+    /// A quick hop up and settle, Dock-bounce style.
+    case bounce
+    /// A brief side-to-side rotation shimmy.
+    case wiggle
+    /// A cartoon squash-and-stretch pop as the icon lands.
+    case squashStretch
+
+    var id: String { rawValue }
+
+    /// Human-readable name for the settings picker.
+    var label: String {
+        switch self {
+        case .none: return "None"
+        case .bounce: return "Bounce"
+        case .wiggle: return "Wiggle"
+        case .squashStretch: return "Squash & Stretch"
+        }
+    }
 }
 
 /// Builds the Tabby preferences window's content as a native AppKit toolbar tab
@@ -332,6 +359,7 @@ private struct PreviewSettingsPane: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
+    @AppStorage(SettingsKey.iconReaction) private var iconReaction: IconReaction = .none
     @AppStorage(SettingsKey.showWindowPreview) private var showWindowPreview = true
     @AppStorage(SettingsKey.previewDwell) private var previewDwell = SettingsKey.defaultPreviewDwell
 
@@ -349,6 +377,12 @@ private struct PreviewSettingsPane: View {
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
+                    }
+                }
+
+                Picker("Icon reaction", selection: $iconReaction) {
+                    ForEach(IconReaction.allCases) { reaction in
+                        Text(reaction.label).tag(reaction)
                     }
                 }
             }

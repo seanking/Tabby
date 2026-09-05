@@ -279,6 +279,12 @@ private struct WindowRow: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
+    @AppStorage(SettingsKey.iconReaction) private var iconReaction: IconReaction = .none
+
+    /// Bumped each time this row becomes the selection, driving the icon's
+    /// reaction animation. A counter rather than a Bool so re-selecting the same
+    /// row replays the animation and deselection never triggers one.
+    @State private var reactionTrigger = 0
 
     /// Name-label and badge point sizes derived from the single "Size" scale, so
     /// one control grows the text, icons, and badges together.
@@ -324,6 +330,23 @@ private struct WindowRow: View {
                         .alignmentGuide(.trailing) { $0[HorizontalAlignment.center] }
                 }
             }
+            // Whimsy: play the chosen reaction on the icon (and its badge) each
+            // time this row becomes the selection.
+            .keyframeAnimator(initialValue: IconReactionValues(), trigger: reactionTrigger) { view, value in
+                view
+                    .scaleEffect(x: value.scaleX, y: value.scaleY, anchor: .bottom)
+                    .rotationEffect(.degrees(value.rotation))
+                    .offset(y: value.offsetY)
+            } keyframes: { _ in
+                reactionKeyframes(for: iconReaction)
+            }
+            .onChange(of: isSelected) { _, selected in
+                if selected { fireReaction() }
+            }
+            .onAppear {
+                // The initially selected row reacts as the switcher opens.
+                if isSelected { fireReaction() }
+            }
 
             Text(displayName)
                 .font(.system(size: fontSize))
@@ -343,6 +366,68 @@ private struct WindowRow: View {
                 .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1.5)
         )
     }
+
+    /// Replays the icon reaction, unless the user has turned reactions off.
+    private func fireReaction() {
+        guard iconReaction != .none else { return }
+        reactionTrigger += 1
+    }
+
+    /// The keyframe timeline for a given reaction style. Every style shares the
+    /// same four tracks so the timeline's type is fixed; each track animates only
+    /// when its style is active and otherwise holds at rest. `.none` is never
+    /// actually triggered (`fireReaction()` skips it), so all tracks stay at rest.
+    @KeyframesBuilder<IconReactionValues>
+    private func reactionKeyframes(for reaction: IconReaction) -> some Keyframes<IconReactionValues> {
+        KeyframeTrack(\.offsetY) {
+            if reaction == .bounce {
+                SpringKeyframe(-9, duration: 0.18, spring: .snappy)
+                SpringKeyframe(0, duration: 0.5, spring: .bouncy)
+            } else {
+                LinearKeyframe(0, duration: 0.01)
+            }
+        }
+        KeyframeTrack(\.rotation) {
+            if reaction == .wiggle {
+                CubicKeyframe(-12, duration: 0.09)
+                CubicKeyframe(12, duration: 0.12)
+                CubicKeyframe(-8, duration: 0.12)
+                CubicKeyframe(6, duration: 0.12)
+                CubicKeyframe(0, duration: 0.1)
+            } else {
+                LinearKeyframe(0, duration: 0.01)
+            }
+        }
+        KeyframeTrack(\.scaleY) {
+            if reaction == .squashStretch {
+                CubicKeyframe(0.7, duration: 0.12)
+                CubicKeyframe(1.15, duration: 0.16)
+                SpringKeyframe(1.0, duration: 0.34, spring: .bouncy)
+            } else {
+                LinearKeyframe(1.0, duration: 0.01)
+            }
+        }
+        KeyframeTrack(\.scaleX) {
+            if reaction == .squashStretch {
+                CubicKeyframe(1.25, duration: 0.12)
+                CubicKeyframe(0.9, duration: 0.16)
+                SpringKeyframe(1.0, duration: 0.34, spring: .bouncy)
+            } else {
+                LinearKeyframe(1.0, duration: 0.01)
+            }
+        }
+    }
+}
+
+/// The transform applied to a reacting icon. Not itself `Animatable` — the
+/// keyframe tracks animate its individual `Animatable` properties (`CGFloat`
+/// scale/offset and `Double` rotation), so each reaction style touches only the
+/// tracks it cares about and leaves the rest at their resting values.
+private struct IconReactionValues {
+    var scaleX: CGFloat = 1
+    var scaleY: CGFloat = 1
+    var rotation: Double = 0
+    var offsetY: CGFloat = 0
 }
 
 /// A transparent, Dock-like backdrop. Uses `NSVisualEffectView` with
