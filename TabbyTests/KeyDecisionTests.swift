@@ -166,6 +166,33 @@ struct KeyDecisionTests {
         #expect(decision == Decision(action: .none, swallow: true, isSwitcherActive: true, isFiltering: true))
     }
 
+    // MARK: Cmd+, open settings
+
+    @Test func commandCommaWhileSwitchingOpensSettings() {
+        // The switcher is Tabby's main surface, so ⌘, opens Settings and
+        // dismisses the HUD (deactivates) rather than leaking to the app behind.
+        let decision = decide(kVK_ANSI_Comma, command: true, active: true)
+        #expect(decision == Decision(action: .openSettings, swallow: true, isSwitcherActive: false))
+    }
+
+    @Test func commandCommaWhenIdlePassesThroughToApp() {
+        // Not switching: ⌘, belongs to the frontmost app's own settings, untouched.
+        let decision = decide(kVK_ANSI_Comma, command: true, active: false)
+        #expect(decision == Decision(action: .none, swallow: false, isSwitcherActive: false))
+    }
+
+    @Test func commandCommaWhileFilteringStillOpensSettings() {
+        // Even mid-filter, ⌘, opens Settings — Cmd is held, so it's never query text.
+        let decision = decide(kVK_ANSI_Comma, command: true, active: true, filtering: true)
+        #expect(decision == Decision(action: .openSettings, swallow: true, isSwitcherActive: false))
+    }
+
+    @Test func commaWithoutCommandPassesThroughWhileActive() {
+        // Plain "," (no Cmd) isn't the settings shortcut — don't swallow it.
+        let decision = decide(kVK_ANSI_Comma, command: false, active: true)
+        #expect(decision == Decision(action: .none, swallow: false, isSwitcherActive: true))
+    }
+
     // MARK: Filter text entry
 
     @Test func printableKeyBuildsQueryWhileFiltering() {
