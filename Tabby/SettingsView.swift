@@ -12,6 +12,7 @@ enum SettingsKey {
     static let activationDelay = "activationDelay"
     static let uiScale = "uiScale"
     static let iconReaction = "iconReaction"
+    static let hapticFeedback = "hapticFeedback"
 
     /// Default dwell (seconds) before the window preview appears. Shared so the
     /// settings UI and the switcher agree when no value has been stored yet.
@@ -21,6 +22,11 @@ enum SettingsKey {
     /// Cmd+Tab. Releasing Cmd within this window is a quick switch. Shared so the
     /// settings UI and the switcher agree when no value has been stored yet.
     static let defaultActivationDelay = 0.4
+
+    /// Whether the switcher ticks the trackpad as the selection steps between
+    /// windows. On by default; a silent no-op on hardware without a Force Touch
+    /// trackpad. Shared so the settings UI and the switcher agree when unset.
+    static let defaultHapticFeedback = true
 
     /// Multiplier applied to the switcher's text and badges. 1.0 renders at the
     /// baseline sizes below; the Appearance "Size" control scales it up or down.
@@ -314,6 +320,7 @@ private struct PermissionRow: View {
 /// General options: launch behavior and switcher activation.
 private struct GeneralSettingsPane: View {
     @AppStorage(SettingsKey.activationDelay) private var activationDelay = SettingsKey.defaultActivationDelay
+    @AppStorage(SettingsKey.hapticFeedback) private var hapticFeedback = SettingsKey.defaultHapticFeedback
     @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
@@ -333,6 +340,16 @@ private struct GeneralSettingsPane: View {
                 Text("Switcher")
             } footer: {
                 Text("How long to hold ⌘ before the switcher appears. A quick ⌘Tab within this delay just switches to the previous window.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Trackpad haptics while switching", isOn: $hapticFeedback)
+            } header: {
+                Text("Feedback")
+            } footer: {
+                Text("Tick the trackpad as the selection moves between windows. Requires a Force Touch trackpad; has no effect on other hardware.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

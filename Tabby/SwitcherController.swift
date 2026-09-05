@@ -72,6 +72,11 @@ final class SwitcherController: ObservableObject {
         UserDefaults.standard.object(forKey: SettingsKey.previewDwell) as? Double ?? SettingsKey.defaultPreviewDwell
     }
 
+    /// Whether to tick the trackpad as the selection moves (Settings → Feedback).
+    private var hapticFeedbackEnabled: Bool {
+        UserDefaults.standard.object(forKey: SettingsKey.hapticFeedback) as? Bool ?? SettingsKey.defaultHapticFeedback
+    }
+
     func start() {
         eventTap.onActivate = { [weak self] in self?.activate() }
         eventTap.onAdvance = { [weak self] reverse in self?.advance(reverse: reverse) }
@@ -259,6 +264,7 @@ final class SwitcherController: ObservableObject {
         // trigger another hover in a loop.
         autoScrollOnSelect = false
         selectedIndex = index
+        performHaptic()
         scheduleDwellPreview()
     }
 
@@ -277,8 +283,18 @@ final class SwitcherController: ObservableObject {
         presentPanel()
         autoScrollOnSelect = true
         selectedIndex = Self.nextIndex(from: selectedIndex, reverse: reverse, count: windows.count)
+        performHaptic()
         // Moving the selection restarts the dwell timer and hides any preview.
         scheduleDwellPreview()
+    }
+
+    /// Ticks the trackpad as the selection steps to another window, giving each
+    /// move a physical detent. `.levelChange` is the pattern macOS uses for
+    /// discrete value stepping. A no-op without a Force Touch trackpad, or when
+    /// the user has turned it off in Settings.
+    private func performHaptic() {
+        guard hapticFeedbackEnabled else { return }
+        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
     }
 
     /// Computes the next selection index, wrapping around at both ends. Pure and
