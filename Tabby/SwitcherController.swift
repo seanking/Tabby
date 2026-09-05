@@ -22,6 +22,13 @@ final class SwitcherController: ObservableObject {
     /// The current filter query typed by the user.
     @Published private(set) var filterText = ""
 
+    /// Whether the next `selectedIndex` change should scroll the selected row
+    /// into view. Suppressed for pointer hover so a long list doesn't scroll out
+    /// from under the cursor (which would cascade into another hover); keyboard
+    /// navigation re-enables it. Not `@Published`: the view only reads it inside
+    /// its `selectedIndex` change handler, so it must not trigger its own update.
+    private(set) var autoScrollOnSelect = true
+
     /// The full, unfiltered window list captured at activation. `windows` holds
     /// the currently displayed (possibly filtered) subset. Exposed so the view
     /// can size the list to the full set, keeping the HUD's width fixed while
@@ -209,6 +216,7 @@ final class SwitcherController: ObservableObject {
     /// query, keeping the selection on the first match, then re-fits the panel.
     private func applyFilter() {
         windows = Self.filter(allWindows, query: filterText)
+        autoScrollOnSelect = true
         selectedIndex = 0
         resizePanelKeepingLeftEdge()
     }
@@ -240,11 +248,34 @@ final class SwitcherController: ObservableObject {
         })
     }
 
+    // MARK: - Mouse
+
+    /// Moves the selection to the row the pointer is hovering over, restarting
+    /// the dwell timer just like a keyboard move. Ignored until the HUD is on
+    /// screen so stray pointer motion can't hijack an in-flight quick switch.
+    func hover(index: Int) {
+        guard isPanelPresented, windows.indices.contains(index), index != selectedIndex else { return }
+        // Don't auto-scroll toward the cursor — that would move the row and
+        // trigger another hover in a loop.
+        autoScrollOnSelect = false
+        selectedIndex = index
+        scheduleDwellPreview()
+    }
+
+    /// Clicking a row commits to that window immediately — the mouse equivalent
+    /// of releasing Cmd on the highlighted row.
+    func choose(index: Int) {
+        guard windows.indices.contains(index) else { return }
+        selectedIndex = index
+        commit()
+    }
+
     private func advance(reverse: Bool) {
         guard !windows.isEmpty else { return }
         // A second Tab (or arrow key) means the user wants to browse: reveal the
         // HUD immediately rather than waiting out the delay.
         presentPanel()
+        autoScrollOnSelect = true
         selectedIndex = Self.nextIndex(from: selectedIndex, reverse: reverse, count: windows.count)
         // Moving the selection restarts the dwell timer and hides any preview.
         scheduleDwellPreview()

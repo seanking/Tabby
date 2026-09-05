@@ -39,6 +39,15 @@ struct SwitcherView: View {
                                 iconSize: iconSize,
                                 nameWidth: nameColumnWidth
                             )
+                            // Point the selection at whatever row the cursor is
+                            // over, and commit to it on click.
+                            .contentShape(Rectangle())
+                            .onHover { hovering in
+                                if hovering { controller.hover(index: index) }
+                            }
+                            .onTapGesture {
+                                controller.choose(index: index)
+                            }
 
                             // Live window preview, revealed inline under the row
                             // once the user has dwelled on it (Cmd held ~2s).
@@ -80,6 +89,7 @@ struct SwitcherView: View {
                 if canScrollDown { scrollChevron(up: false) }
             }
             .onChange(of: controller.selectedIndex) { _, newValue in
+                guard controller.autoScrollOnSelect else { return }
                 guard controller.windows.indices.contains(newValue) else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
                     proxy.scrollTo(controller.windows[newValue].id, anchor: .center)
