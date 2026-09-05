@@ -18,6 +18,8 @@ final class EventTapManager {
     var onMinimizeSelected: (() -> Void)?
     /// Fired when the user presses "P" while switching to show/hide the preview.
     var onTogglePreview: (() -> Void)?
+    /// Fired when the user presses Cmd+, while switching, to open Settings.
+    var onOpenSettings: (() -> Void)?
     /// Fired when the user presses Cmd+F while switching to reveal the filter.
     var onFilterActivate: (() -> Void)?
     /// Fired for each character typed into the filter (already the resolved,
@@ -68,6 +70,17 @@ final class EventTapManager {
         runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
+    /// Forces the tap into an active, latched session — used when the switcher is
+    /// opened by something other than Cmd+Tab (the menu bar's "Open Tabby"). With
+    /// no Cmd held to release, the session must latch so arrow keys navigate and
+    /// the user dismisses explicitly with Return/Esc (or a click) rather than by
+    /// releasing Cmd.
+    func beginLatchedSession() {
+        isSwitcherActive = true
+        isFiltering = false
+        isLatched = true
     }
 
     /// Clears all in-session state so the next Cmd+Tab starts clean. Called by
@@ -136,6 +149,7 @@ final class EventTapManager {
             case .advance(let reverse): onAdvance?(reverse)
             case .select: onSelect?()
             case .escape: onEscape?()
+            case .openSettings: onOpenSettings?()
             case .hideSelected: onHideSelected?()
             case .quitSelected: onQuitSelected?()
             case .minimizeSelected: onMinimizeSelected?()
@@ -163,6 +177,7 @@ final class EventTapManager {
             case advance(reverse: Bool)
             case select
             case escape
+            case openSettings
             case hideSelected
             case quitSelected
             case minimizeSelected
@@ -237,6 +252,12 @@ final class EventTapManager {
         // Only Cmd+Tab is intercepted when the switcher isn't open.
         guard isSwitcherActive else {
             return KeyDecision(action: .none, swallow: false, isSwitcherActive: false)
+        }
+
+        // Cmd+, opens Settings and dismisses the HUD — the switcher is Tabby's
+        // main surface, so its settings shortcut works even while it's showing.
+        if command, keyCode == kVK_ANSI_Comma {
+            return KeyDecision(action: .openSettings, swallow: true, isSwitcherActive: false)
         }
 
         // Cmd+F reveals the filter; a repeat while filtering is a no-op (but is

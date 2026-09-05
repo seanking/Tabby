@@ -80,7 +80,11 @@ enum IconReaction: String, CaseIterable, Identifiable {
 /// toolbar items and a window that resizes to fit each tab. Each tab hosts one
 /// SwiftUI pane. A plain SwiftUI `TabView` can't produce this appearance inside
 /// a manually-created `NSWindow`, so we drop down to `NSTabViewController` in
-/// `.toolbar` mode and wrap each pane in an `NSHostingController`.
+/// `.toolbar` mode and wrap each pane in an `NSHostingController`. `AppDelegate`
+/// owns the window so it can be opened, activated, and fronted on demand — the
+/// SwiftUI `Settings` scene can't be opened imperatively (macOS refuses the old
+/// `showSettingsWindow:` selector and `SettingsLink` won't front an accessory
+/// app's window).
 @MainActor
 func makeSettingsTabController() -> NSTabViewController {
     let controller = NSTabViewController()

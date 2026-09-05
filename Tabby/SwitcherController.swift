@@ -13,6 +13,10 @@ final class SwitcherController: ObservableObject {
     @Published private(set) var icons: [pid_t: NSImage] = [:]
     /// Notification badge labels (e.g. "3") keyed by app pid, read from the Dock.
     @Published private(set) var badges: [pid_t: String] = [:]
+
+    /// Called when the user presses ⌘, while the HUD is up, so the owner
+    /// (AppDelegate) can open the Settings window.
+    var onOpenSettings: (() -> Void)?
     /// Window whose large preview is shown after the user dwells on it. Nil until
     /// the dwell delay elapses without the selection changing.
     @Published private(set) var previewWindowID: CGWindowID?
@@ -87,6 +91,7 @@ final class SwitcherController: ObservableObject {
         eventTap.onQuitSelected = { [weak self] in self?.quitSelected() }
         eventTap.onMinimizeSelected = { [weak self] in self?.minimizeSelected() }
         eventTap.onTogglePreview = { [weak self] in self?.togglePreview() }
+        eventTap.onOpenSettings = { [weak self] in self?.openSettings() }
         eventTap.onFilterActivate = { [weak self] in self?.activateFilter() }
         eventTap.onFilterInput = { [weak self] text in self?.appendFilter(text) }
         eventTap.onFilterBackspace = { [weak self] in self?.deleteFilterCharacter() }
@@ -123,6 +128,27 @@ final class SwitcherController: ObservableObject {
         // delay) should just switch to the next window. Only reveal the list if
         // Cmd is still held once the timer fires.
         schedulePresentation()
+    }
+
+    /// Opens the switcher from outside the Cmd+Tab hotkey flow (the menu bar's
+    /// "Open Tabby"). Takes the same window snapshot as a Cmd+Tab, then reveals
+    /// the HUD immediately — no activation delay — and latches the event-tap
+    /// session so arrow keys navigate and Return/Esc or a click dismiss, since
+    /// there's no held Cmd to release. No-op when there aren't at least two
+    /// windows to switch between.
+    func openFromMenu() {
+        activate()
+        guard !windows.isEmpty else { return }
+        presentPanel()
+        eventTap.beginLatchedSession()
+    }
+
+    /// ⌘, while switching: dismiss the HUD and hand off to the owner to open
+    /// Settings. Cancelling first tears down the session cleanly so the next
+    /// Cmd+Tab starts fresh.
+    private func openSettings() {
+        cancel()
+        onOpenSettings?()
     }
 
     /// Starts the delay after which the HUD appears if the user keeps holding

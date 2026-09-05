@@ -3,11 +3,10 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    private var statusItem: NSStatusItem!
     private let switcher = SwitcherController()
     private var permissionPollTimer: Timer?
-    private var settingsWindow: NSWindow?
     private var welcomeWindow: NSWindow?
+    private var settingsWindow: NSWindow?
 
     /// Whether the first-launch welcome/permissions window has been dismissed.
     /// Persisted so onboarding only appears the first time Tabby runs.
@@ -17,60 +16,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         // When the app is only acting as the unit-test host, skip all runtime
-        // side effects: no status-bar item, no Accessibility permission prompt,
-        // and no global event tap.
+        // side effects: no Accessibility permission prompt and no global event
+        // tap. (The menu-bar item is a SwiftUI `MenuBarExtra` scene gated on the
+        // same flag.)
         guard !AppDelegate.isRunningTests else { return }
 
-        setUpStatusItem()
+        // Opening Settings from the switcher HUD (⌘, while it's up) routes back
+        // here so the same window logic serves the menu bar, ⌘,, and the HUD.
+        switcher.onOpenSettings = { [weak self] in self?.openSettings() }
+
         presentWelcomeIfNeeded()
         beginPermissionGate()
     }
 
-    /// True when the process was launched to host `xctest` (unit tests), rather
-    /// than as the real menu-bar app.
-    private static var isRunningTests: Bool {
-        let environment = ProcessInfo.processInfo.environment
-        return environment["XCTestConfigurationFilePath"] != nil
-            || environment["XCTestBundlePath"] != nil
-            || NSClassFromString("XCTestCase") != nil
-    }
+    // MARK: - Settings window
 
-    func applicationWillTerminate(_ notification: Notification) {
-        switcher.stop()
-        permissionPollTimer?.invalidate()
-    }
-
-    // MARK: - Status item
-
-    private func setUpStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(
-            systemSymbolName: "square.stack",
-            accessibilityDescription: "Tabby"
-        )
-
-        let menu = NSMenu()
-        menu.addItem(withTitle: "Tabby", action: nil, keyEquivalent: "").isEnabled = false
-        menu.addItem(.separator())
-
-        let settingsItem = NSMenuItem(
-            title: "Settings…",
-            action: #selector(openSettings),
-            keyEquivalent: ","
-        )
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(title: "Quit Tabby", action: #selector(quit), keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
-
-        statusItem.menu = menu
-    }
-
-    @objc private func openSettings() {
+    /// Opens (or re-fronts) the preferences window. Owned here rather than via a
+    /// SwiftUI `Settings` scene because that scene can't be opened imperatively:
+    /// macOS refuses the old `showSettingsWindow:` selector, and `SettingsLink`
+    /// won't bring an accessory app's window to the foreground. Activating and
+    /// ordering front here makes the window reliably appear on top from every
+    /// entry point — the menu bar, ⌘,, and the switcher HUD.
+    func openSettings() {
         if settingsWindow == nil {
             let window = NSWindow(contentViewController: makeSettingsTabController())
             window.title = "Tabby Settings"
@@ -85,13 +52,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+        // Force the window above other apps' windows even if activation is
+        // deferred by the system (accessory apps aren't always granted it).
+        settingsWindow?.orderFrontRegardless()
         // Clear any first responder AppKit assigned while becoming key, so no
         // field shows a focus ring / cursor until the user clicks into one.
         settingsWindow?.makeFirstResponder(nil)
     }
 
-    @objc private func quit() {
-        NSApp.terminate(nil)
+    /// True when the process was launched to host `xctest` (unit tests), rather
+    /// than as the real menu-bar app.
+    static var isRunningTests: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["XCTestConfigurationFilePath"] != nil
+            || environment["XCTestBundlePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        switcher.stop()
+        permissionPollTimer?.invalidate()
+    }
+
+    /// Opens the switcher HUD on demand, for the menu bar's "Open Tabby" item.
+    func openSwitcher() {
+        switcher.openFromMenu()
     }
 
     // MARK: - First-launch onboarding
