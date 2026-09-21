@@ -40,10 +40,15 @@ struct SwitcherView: View {
                                 nameWidth: nameColumnWidth
                             )
                             // Point the selection at whatever row the cursor is
-                            // over, and commit to it on click.
+                            // over, and commit to it on click. Continuous
+                            // hover (rather than enter/exit) so the controller
+                            // sees every pointer position and can tell a
+                            // deliberate move — including one inside the row
+                            // the cursor already rests in — from the HUD
+                            // opening or reflowing underneath a still cursor.
                             .contentShape(Rectangle())
-                            .onHover { hovering in
-                                if hovering { controller.hover(index: index) }
+                            .onContinuousHover { phase in
+                                if case .active = phase { controller.hover(index: index) }
                             }
                             .onTapGesture {
                                 controller.choose(index: index)

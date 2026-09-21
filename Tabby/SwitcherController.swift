@@ -65,6 +65,11 @@ final class SwitcherController: ObservableObject {
     /// Fires the dwell preview if the selection is held long enough.
     private var dwellTask: Task<Void, Never>?
 
+    /// Decides whether a hover callback reflects a real pointer move. Seeded
+    /// when the HUD appears so a panel that opens (or reflows) under a resting
+    /// cursor can't hijack the selection.
+    private var pointerGate = PointerGate()
+
     /// Whether the window preview is enabled (Settings → Window preview).
     private var previewEnabled: Bool {
         UserDefaults.standard.object(forKey: SettingsKey.showWindowPreview) as? Bool ?? true
@@ -169,6 +174,9 @@ final class SwitcherController: ObservableObject {
         presentationTask = nil
         guard !isPanelPresented, !windows.isEmpty else { return }
         isPanelPresented = true
+        // Remember where the pointer is resting as the HUD opens, so the row it
+        // happens to land under doesn't become the selection.
+        pointerGate.seed(at: NSEvent.mouseLocation)
         showPanel()
         // Always capture snapshots so the "P" preview hotkey works even when the
         // automatic dwell preview is turned off.
@@ -283,9 +291,15 @@ final class SwitcherController: ObservableObject {
 
     /// Moves the selection to the row the pointer is hovering over, restarting
     /// the dwell timer just like a keyboard move. Ignored until the HUD is on
-    /// screen so stray pointer motion can't hijack an in-flight quick switch.
+    /// screen so stray pointer motion can't hijack an in-flight quick switch,
+    /// and until the pointer has genuinely moved: the row that merely happens to
+    /// sit under a resting cursor must not steal the keyboard's selection.
     func hover(index: Int) {
-        guard isPanelPresented, windows.indices.contains(index), index != selectedIndex else { return }
+        guard isPanelPresented, windows.indices.contains(index) else { return }
+        // Checked before the index comparison so the gate keeps following the
+        // pointer even while it moves within the already-selected row.
+        guard pointerGate.consume(NSEvent.mouseLocation) else { return }
+        guard index != selectedIndex else { return }
         // Don't auto-scroll toward the cursor — that would move the row and
         // trigger another hover in a loop.
         autoScrollOnSelect = false
@@ -430,6 +444,7 @@ final class SwitcherController: ObservableObject {
         filterText = ""
         allWindows = []
         isPanelPresented = false
+        pointerGate.reset()
         // Clear the tap's session flags too, so a switch that ends here (rather
         // than via a Return/Esc/Cmd-release keystroke the tap sees) can't leave
         // stale filter/latch state to block the next session's commit.
@@ -537,5 +552,47 @@ final class SwitcherController: ObservableObject {
         // Recompute the native window shadow for the new (rounded) content size,
         // otherwise it can render stale or squared off.
         panel.invalidateShadow()
+    }
+}
+
+/// Tells a deliberate pointer move apart from the hover callbacks the list
+/// generates underneath a cursor that hasn't moved at all — the HUD opening
+/// over the pointer, a keyboard move scrolling a row under it, or a preview
+/// growing the panel. Anchored to the pointer's screen position when the HUD
+/// appears and re-anchored on every move it accepts.
+///
+/// A plain value type with no AppKit dependency, so the whole gate (not just
+/// its arithmetic) can be unit-tested by feeding it positions.
+struct PointerGate {
+    /// Screen position of the pointer the last time a move was accepted, or nil
+    /// before the HUD has seeded one.
+    private(set) var anchor: CGPoint?
+
+    /// How far the pointer must travel to count as moved. Absorbs the sub-pixel
+    /// jitter reported for a resting pointer while staying well under a row's
+    /// height, so even a small nudge points at a row deliberately.
+    static let tolerance: CGFloat = 1
+
+    /// Anchors the gate to where the pointer is resting as the HUD opens. Until
+    /// it moves from here, hover is ignored.
+    mutating func seed(at location: CGPoint) {
+        anchor = location
+    }
+
+    /// Forgets the anchor when the switcher closes.
+    mutating func reset() {
+        anchor = nil
+    }
+
+    /// Whether `location` is a real move, re-anchoring there when it is. An
+    /// unseeded gate accepts the first position it sees.
+    mutating func consume(_ location: CGPoint) -> Bool {
+        guard let anchor else {
+            self.anchor = location
+            return true
+        }
+        guard hypot(location.x - anchor.x, location.y - anchor.y) > Self.tolerance else { return false }
+        self.anchor = location
+        return true
     }
 }
