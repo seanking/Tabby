@@ -122,7 +122,10 @@ final class EventTapManager {
                 // or Esc rather than by letting go of Cmd.
                 if isFiltering || isLatched { return Unmanaged.passRetained(event) }
                 isSwitcherActive = false
-                onCommandReleased?()
+                // Committing raises/focuses a window via synchronous AX calls;
+                // run it a tick later so this tap callback returns immediately
+                // (see `dispatch` for why).
+                DispatchQueue.main.async { [weak self] in self?.onCommandReleased?() }
             }
             return Unmanaged.passRetained(event)
         }
@@ -143,7 +146,34 @@ final class EventTapManager {
             isFiltering = decision.isFiltering
             isLatched = decision.isLatched
 
-            switch decision.action {
+            // Run the action a tick later so this callback returns immediately
+            // (see `dispatch`). The session-state fields above are updated
+            // synchronously, so the next event still decodes against fresh state.
+            dispatch(decision.action)
+
+            // Swallowed keys (return nil) don't reach the app behind the HUD nor
+            // the system's own Cmd+Tab switcher.
+            return decision.swallow ? nil : Unmanaged.passRetained(event)
+        }
+
+        return Unmanaged.passRetained(event)
+    }
+
+    /// Routes a decoded action to its callback on the main queue, one run-loop
+    /// tick after the tap callback returns. The switcher work behind these
+    /// callbacks (enumerating windows, reading the Dock and every app's
+    /// Accessibility tree, raising a window) is slow, synchronous cross-process
+    /// IPC. Running it inline would keep the tap callback busy long enough for
+    /// macOS to hit the event-tap timeout and disable the tap — which leaks the
+    /// in-flight Cmd+Tab (and any that follow until re-enable) straight to the
+    /// system's own switcher. Deferring keeps the callback near-instant. The
+    /// callbacks already run on the main actor and the main queue is FIFO, so
+    /// this preserves ordering across events.
+    private func dispatch(_ action: KeyDecision.Action) {
+        guard action != .none else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            switch action {
             case .none: break
             case .activate: onActivate?()
             case .advance(let reverse): onAdvance?(reverse)
@@ -158,13 +188,7 @@ final class EventTapManager {
             case .filterInput(let text): onFilterInput?(text)
             case .filterBackspace: onFilterBackspace?()
             }
-
-            // Swallowed keys (return nil) don't reach the app behind the HUD nor
-            // the system's own Cmd+Tab switcher.
-            return decision.swallow ? nil : Unmanaged.passRetained(event)
         }
-
-        return Unmanaged.passRetained(event)
     }
 
     /// The result of interpreting a keyDown while the switcher may be active:
