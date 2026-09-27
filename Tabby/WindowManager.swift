@@ -323,14 +323,96 @@ final class WindowManager: Sendable {
         // A hidden app (⌘H) won't show its windows on activate alone — unhide
         // first so the raised window actually becomes visible. No-op otherwise.
         app?.unhide()
-        app?.activate()
 
-        guard let axWindow = axWindowsByID(for: window.pid)[window.id] else { return }
-        // Restore the window if it was minimized, then raise/focus it.
-        AXUIElementSetAttributeValue(axWindow, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        let axWindow = axWindowsByID(for: window.pid)[window.id]
+        // Restore the window if it was minimized before bringing it forward.
+        if let axWindow {
+            AXUIElementSetAttributeValue(axWindow, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        }
+
+        // Public activation is app-wide and tends to pull every one of the
+        // app's windows above other apps. SkyLight can front the process with
+        // only this window on top, so prefer it when it's available.
+        if SkyLight.bringToFront(pid: window.pid, windowID: window.id) {
+            if let axWindow {
+                AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
+            }
+            return
+        }
+
+        guard let axWindow else { return }
         AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
         AXUIElementSetAttributeValue(axWindow, kAXMainAttribute as CFString, kCFBooleanTrue)
         AXUIElementSetAttributeValue(axWindow, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+
+        app?.activate()
+    }
+}
+
+/// Private SkyLight (WindowServer) calls for bringing a single window to the
+/// front — the same technique AltTab uses, since no public API can activate an
+/// app without also reordering its other windows. Symbols are resolved at
+/// runtime so that if Apple removes or renames them, `bringToFront` returns
+/// false and `activate(_:)` falls back to public activation.
+enum SkyLight {
+    private typealias GetProcessForPIDFn = @convention(c) (pid_t, UnsafeMutablePointer<ProcessSerialNumber>) -> OSStatus
+    private typealias SetFrontProcessWithOptionsFn = @convention(c) (UnsafeMutablePointer<ProcessSerialNumber>, CGWindowID, UInt32) -> CGError
+    private typealias PostEventRecordToFn = @convention(c) (UnsafeMutablePointer<ProcessSerialNumber>, UnsafeMutablePointer<UInt8>) -> CGError
+
+    /// `_SLPSSetFrontProcessWithOptions` mode that fronts just the given
+    /// window, as if the user had clicked it (as opposed to all windows, 0x100).
+    private static let userGeneratedMode: UInt32 = 0x200
+
+    private static let handle = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY)
+
+    private static func symbol<T>(_ name: String, in handle: UnsafeMutableRawPointer?, as type: T.Type) -> T? {
+        guard let pointer = dlsym(handle, name) else { return nil }
+        return unsafeBitCast(pointer, to: type)
+    }
+
+    // `GetProcessForPID` is a deprecated (but still functional) HIServices
+    // call; looking it up dynamically avoids the deprecation warning. The
+    // bit pattern -2 is Darwin's RTLD_DEFAULT, which Swift doesn't import.
+    private static let getProcessForPID = symbol("GetProcessForPID", in: UnsafeMutableRawPointer(bitPattern: -2), as: GetProcessForPIDFn.self)
+    private static let setFrontProcessWithOptions = symbol("_SLPSSetFrontProcessWithOptions", in: handle, as: SetFrontProcessWithOptionsFn.self)
+    private static let postEventRecordTo = symbol("SLPSPostEventRecordTo", in: handle, as: PostEventRecordToFn.self)
+
+    /// Whether every private symbol `bringToFront` needs resolved on this macOS.
+    static var isAvailable: Bool {
+        getProcessForPID != nil && setFrontProcessWithOptions != nil && postEventRecordTo != nil
+    }
+
+    /// Makes `pid` the frontmost process with only `windowID` brought forward,
+    /// then makes that window key. Returns false if the private symbols are
+    /// unavailable or the process can't be found.
+    static func bringToFront(pid: pid_t, windowID: CGWindowID) -> Bool {
+        guard let getProcessForPID, let setFrontProcessWithOptions, let postEventRecordTo else { return false }
+
+        var psn = ProcessSerialNumber()
+        guard getProcessForPID(pid, &psn) == noErr else { return false }
+        guard setFrontProcessWithOptions(&psn, windowID, userGeneratedMode) == .success else { return false }
+
+        // Make the window key by posting the two synthetic WindowServer event
+        // records (0x01, then 0x02) that a click on the window would produce.
+        for kind: UInt8 in [0x01, 0x02] {
+            var bytes = keyWindowEventRecord(kind: kind, windowID: windowID)
+            _ = postEventRecordTo(&psn, &bytes)
+        }
+        return true
+    }
+
+    /// Builds one of the event records `bringToFront` posts to make a window
+    /// key. The 0xF8-byte layout is undocumented and mirrors AltTab's.
+    static func keyWindowEventRecord(kind: UInt8, windowID: CGWindowID) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: 0xF8)
+        bytes[0x04] = 0xF8
+        bytes[0x08] = kind
+        bytes[0x3A] = 0x10
+        for offset in 0x20..<0x30 { bytes[offset] = 0xFF }
+        withUnsafeBytes(of: windowID.littleEndian) { idBytes in
+            for (index, byte) in idBytes.enumerated() { bytes[0x3C + index] = byte }
+        }
+        return bytes
     }
 }
 

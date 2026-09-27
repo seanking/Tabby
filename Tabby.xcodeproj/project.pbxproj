@@ -15,6 +15,7 @@
 		1C3D8519D748BFFE1470CDDC /* SwitcherController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8FB20CFA1818E69C7DF302F /* SwitcherController.swift */; };
 		2585C9B340424C2CB3AA61DC /* WindowInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27BE6A2FDC38B53A649728C /* WindowInfo.swift */; };
 		3CB72F1730619EE200A20A40 /* PointerMovementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB72F1630619EE200A20A40 /* PointerMovementTests.swift */; };
+		3CB72F1B30697AAD00A20A40 /* SkyLightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB72F1A30697AAD00A20A40 /* SkyLightTests.swift */; };
 		5A8D0D6EABDFFE33F1927589 /* EventTapManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4124192BBA869472106B3EDA /* EventTapManager.swift */; };
 		6DA1E75F69A1250599745361 /* DisplayNameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ABB51F9DF3ABC575CA31B55 /* DisplayNameTests.swift */; };
 		9BFBE7C535F3125811085968 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC33BC2C5CE8786D6FEB74F /* WindowManager.swift */; };
@@ -44,6 +45,7 @@
 		27D063DBA009E9FAF61AF1ED /* BadgeCountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgeCountTests.swift; sourceTree = "<group>"; };
 		31E476BA2057C11FA051F261 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3CB72F1630619EE200A20A40 /* PointerMovementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerMovementTests.swift; sourceTree = "<group>"; };
+		3CB72F1A30697AAD00A20A40 /* SkyLightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkyLightTests.swift; sourceTree = "<group>"; };
 		3CEE0EE1E7B97A810CF8659C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4124192BBA869472106B3EDA /* EventTapManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventTapManager.swift; sourceTree = "<group>"; };
 		46E8FCEF8EE638A513FC2C54 /* Permissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Permissions.swift; sourceTree = "<group>"; };
@@ -103,6 +105,7 @@
 				26D8334D21A2610249CFF337 /* NavigationTests.swift */,
 				EE04BB594F55A14D7517EA4A /* WindowInfoTests.swift */,
 				3CB72F1630619EE200A20A40 /* PointerMovementTests.swift */,
+				3CB72F1A30697AAD00A20A40 /* SkyLightTests.swift */,
 			);
 			path = TabbyTests;
 			sourceTree = "<group>";
@@ -212,6 +215,7 @@
 				03F0FC5026D60B6DD9F13F86 /* NavigationTests.swift in Sources */,
 				3CB72F1730619EE200A20A40 /* PointerMovementTests.swift in Sources */,
 				10DBAEC36DE4CC5FB19F1B41 /* WindowInfoTests.swift in Sources */,
+				3CB72F1B30697AAD00A20A40 /* SkyLightTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
