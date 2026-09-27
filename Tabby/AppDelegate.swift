@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let switcher = SwitcherController()
+    private let windowManager = WindowManager()
     private var permissionPollTimer: Timer?
     private var welcomeWindow: NSWindow?
     private var settingsWindow: NSWindow?
@@ -91,6 +92,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return false
     }
 
+    /// Right-clicking the Dock icon lists every switchable window, grouped by
+    /// app: one row (icon + app name) per app, whose submenu holds that app's
+    /// windows. The Dock asks for this menu each time it opens, so the list is
+    /// always current. Picking a window raises it just like the switcher.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let groups = dockMenuGroups(for: windowManager.listWindows())
+        guard !groups.isEmpty else { return nil }
+
+        let menu = NSMenu()
+        for group in groups {
+            let submenu = NSMenu(title: group.appName)
+            for window in group.windows {
+                let item = NSMenuItem(
+                    title: switcherDisplayName(for: window, showAppName: false),
+                    action: #selector(activateDockMenuWindow(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = window
+                submenu.addItem(item)
+            }
+
+            let appItem = NSMenuItem(title: group.appName, action: nil, keyEquivalent: "")
+            appItem.image = menuIcon(for: group.pid)
+            appItem.submenu = submenu
+            menu.addItem(appItem)
+        }
+        return menu
+    }
+
+    @objc private func activateDockMenuWindow(_ sender: NSMenuItem) {
+        guard let window = sender.representedObject as? WindowInfo else { return }
+        windowManager.activate(window)
+    }
+
+    /// The app's icon scaled down to menu-row size.
+    private func menuIcon(for pid: pid_t) -> NSImage? {
+        guard let icon = windowManager.icon(for: pid)?.copy() as? NSImage else { return nil }
+        icon.size = NSSize(width: 16, height: 16)
+        return icon
+    }
+
     /// Shows or hides the Dock icon to match Settings → General → Dock. The
     /// Info.plist declares `LSUIElement`, so Tabby starts as an accessory app;
     /// switching to `.regular` at runtime adds the Dock icon.
@@ -163,4 +206,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
     }
+}
+
+/// One app's section in the Dock menu: its windows, alphabetized.
+struct DockMenuGroup: Equatable {
+    let pid: pid_t
+    let appName: String
+    let windows: [WindowInfo]
+}
+
+/// Groups the switcher's window list by owning app for the Dock menu. Apps are
+/// sorted alphabetically by name, and each app's windows by the label the menu
+/// shows, both using Finder-style ordering (case-insensitive, "Window 2" before
+/// "Window 10"). Ties — e.g. two processes of the same app — fall back to pid
+/// or window id so the order is stable between menu openings.
+func dockMenuGroups(for windows: [WindowInfo]) -> [DockMenuGroup] {
+    let windowsByPID = Dictionary(grouping: windows, by: \.pid)
+
+    return windowsByPID
+        .compactMap { pid, appWindows -> DockMenuGroup? in
+            guard let first = appWindows.first else { return nil }
+            let sorted = appWindows.sorted { lhs, rhs in
+                let lhsName = switcherDisplayName(for: lhs, showAppName: false)
+                let rhsName = switcherDisplayName(for: rhs, showAppName: false)
+                switch lhsName.localizedStandardCompare(rhsName) {
+                case .orderedAscending: return true
+                case .orderedDescending: return false
+                case .orderedSame: return lhs.id < rhs.id
+                }
+            }
+            return DockMenuGroup(pid: pid, appName: first.ownerName, windows: sorted)
+        }
+        .sorted { lhs, rhs in
+            switch lhs.appName.localizedStandardCompare(rhs.appName) {
+            case .orderedAscending: return true
+            case .orderedDescending: return false
+            case .orderedSame: return lhs.pid < rhs.pid
+            }
+        }
 }
