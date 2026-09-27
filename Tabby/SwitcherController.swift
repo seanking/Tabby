@@ -72,7 +72,7 @@ final class SwitcherController: ObservableObject {
 
     /// Whether the window preview is enabled (Settings → Window preview).
     private var previewEnabled: Bool {
-        UserDefaults.standard.object(forKey: SettingsKey.showWindowPreview) as? Bool ?? true
+        UserDefaults.standard.object(forKey: SettingsKey.showWindowPreview) as? Bool ?? SettingsKey.defaultShowWindowPreview
     }
 
     /// How long the user must dwell on a selection (Cmd held, no movement)

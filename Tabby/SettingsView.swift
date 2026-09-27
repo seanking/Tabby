@@ -20,6 +20,10 @@ enum SettingsKey {
     /// the switcher. Shared so the settings UI and `AppDelegate` agree when unset.
     static let defaultShowDockIcon = true
 
+    /// Whether the window preview is shown by default. Shared so the settings UI
+    /// and the switcher agree when no value has been stored yet.
+    static let defaultShowWindowPreview = false
+
     /// Default dwell (seconds) before the window preview appears. Shared so the
     /// settings UI and the switcher agree when no value has been stored yet.
     static let defaultPreviewDwell = 1.0
@@ -415,7 +419,7 @@ private struct PreviewSettingsPane: View {
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
     @AppStorage(SettingsKey.iconReaction) private var iconReaction: IconReaction = .none
-    @AppStorage(SettingsKey.showWindowPreview) private var showWindowPreview = true
+    @AppStorage(SettingsKey.showWindowPreview) private var showWindowPreview = SettingsKey.defaultShowWindowPreview
     @AppStorage(SettingsKey.previewDwell) private var previewDwell = SettingsKey.defaultPreviewDwell
     @AppStorage(SettingsKey.previewScale) private var previewScale = SettingsKey.defaultPreviewScale
 
