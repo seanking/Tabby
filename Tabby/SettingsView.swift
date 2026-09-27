@@ -14,6 +14,11 @@ enum SettingsKey {
     static let uiScale = "uiScale"
     static let iconReaction = "iconReaction"
     static let hapticFeedback = "hapticFeedback"
+    static let showDockIcon = "showDockIcon"
+
+    /// Whether Tabby shows an icon in the Dock while running. Clicking it opens
+    /// the switcher. Shared so the settings UI and `AppDelegate` agree when unset.
+    static let defaultShowDockIcon = true
 
     /// Default dwell (seconds) before the window preview appears. Shared so the
     /// settings UI and the switcher agree when no value has been stored yet.
@@ -340,6 +345,7 @@ private struct PermissionRow: View {
 private struct GeneralSettingsPane: View {
     @AppStorage(SettingsKey.activationDelay) private var activationDelay = SettingsKey.defaultActivationDelay
     @AppStorage(SettingsKey.hapticFeedback) private var hapticFeedback = SettingsKey.defaultHapticFeedback
+    @AppStorage(SettingsKey.showDockIcon) private var showDockIcon = SettingsKey.defaultShowDockIcon
     @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
@@ -349,6 +355,19 @@ private struct GeneralSettingsPane: View {
                     get: { launchAtLogin.isEnabled },
                     set: { launchAtLogin.setEnabled($0) }
                 ))
+            }
+
+            Section {
+                Toggle("Show icon in Dock", isOn: $showDockIcon)
+                    .onChange(of: showDockIcon) {
+                        AppDelegate.applyDockIconVisibility()
+                    }
+            } header: {
+                Text("Dock")
+            } footer: {
+                Text("Show Tabby in the Dock while it's running. Click the Dock icon to open the switcher.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Section {

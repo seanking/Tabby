@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // same flag.)
         guard !AppDelegate.isRunningTests else { return }
 
+        Self.applyDockIconVisibility()
+
         // Opening Settings from the switcher HUD (⌘, while it's up) routes back
         // here so the same window logic serves the menu bar, ⌘,, and the HUD.
         switcher.onOpenSettings = { [weak self] in self?.openSettings() }
@@ -77,6 +79,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Opens the switcher HUD on demand, for the menu bar's "Open Tabby" item.
     func openSwitcher() {
         switcher.openFromMenu()
+    }
+
+    // MARK: - Dock icon
+
+    /// Clicking the Dock icon (or relaunching Tabby while it's running) opens
+    /// the switcher instead of the default reopen behavior.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard !AppDelegate.isRunningTests else { return false }
+        openSwitcher()
+        return false
+    }
+
+    /// Shows or hides the Dock icon to match Settings → General → Dock. The
+    /// Info.plist declares `LSUIElement`, so Tabby starts as an accessory app;
+    /// switching to `.regular` at runtime adds the Dock icon.
+    static func applyDockIconVisibility() {
+        let show = UserDefaults.standard.object(forKey: SettingsKey.showDockIcon) as? Bool ?? SettingsKey.defaultShowDockIcon
+        let policy: NSApplication.ActivationPolicy = show ? .regular : .accessory
+        guard NSApp.activationPolicy() != policy else { return }
+        NSApp.setActivationPolicy(policy)
+
+        // Dropping to `.accessory` deactivates the app, which would push the
+        // Settings window (where the toggle lives) behind other apps. Bring it
+        // back once the policy change settles.
+        if policy == .accessory {
+            DispatchQueue.main.async {
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
 
     // MARK: - First-launch onboarding
