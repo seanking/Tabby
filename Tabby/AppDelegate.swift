@@ -95,10 +95,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Right-clicking the Dock icon lists every switchable window, grouped by
     /// app: one row (icon + app name) per app, whose submenu holds that app's
     /// windows. The Dock asks for this menu each time it opens, so the list is
-    /// always current. Picking a window raises it just like the switcher.
+    /// always current. Picking a window raises it just like the switcher. A
+    /// Settings item follows the window list.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         let groups = dockMenuGroups(for: windowManager.listWindows())
-        guard !groups.isEmpty else { return nil }
 
         let menu = NSMenu()
         for group in groups {
@@ -119,12 +119,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             appItem.submenu = submenu
             menu.addItem(appItem)
         }
+
+        if !groups.isEmpty {
+            menu.addItem(.separator())
+        }
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
+            action: #selector(openSettingsFromDockMenu(_:)),
+            keyEquivalent: ""
+        )
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
         return menu
     }
 
     @objc private func activateDockMenuWindow(_ sender: NSMenuItem) {
         guard let window = sender.representedObject as? WindowInfo else { return }
         windowManager.activate(window)
+    }
+
+    @objc private func openSettingsFromDockMenu(_ sender: NSMenuItem) {
+        openSettings()
     }
 
     /// The app's icon scaled down to menu-row size.
