@@ -274,7 +274,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seanking.Tabby;
 				PRODUCT_NAME = Tabby;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -371,7 +371,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seanking.Tabby;
 				PRODUCT_NAME = Tabby;
 				PROVISIONING_PROFILE_SPECIFIER = "";
