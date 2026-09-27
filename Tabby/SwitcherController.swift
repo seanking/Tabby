@@ -55,6 +55,11 @@ final class SwitcherController: ObservableObject {
     /// Whether the HUD is currently on screen (vs. an in-flight quick switch).
     private var isPanelPresented = false
 
+    /// Mouse-down monitors installed while the HUD is on screen, so clicking
+    /// anywhere outside it (another app's window, or one of our own) dismisses
+    /// the switcher. Removed when the presentation ends.
+    private var clickMonitors: [Any] = []
+
     /// How long the first Cmd+Tab waits before showing the HUD, from Settings.
     /// Releasing Cmd within this window just switches to the next window — like
     /// the system switcher — while holding Cmd past it reveals the full list.
@@ -178,6 +183,7 @@ final class SwitcherController: ObservableObject {
         // happens to land under doesn't become the selection.
         pointerGate.seed(at: NSEvent.mouseLocation)
         showPanel()
+        installClickMonitors()
         // Always capture snapshots so the "P" preview hotkey works even when the
         // automatic dwell preview is turned off.
         loadThumbnails()
@@ -449,7 +455,36 @@ final class SwitcherController: ObservableObject {
         // than via a Return/Esc/Cmd-release keystroke the tap sees) can't leave
         // stale filter/latch state to block the next session's commit.
         eventTap.endSession()
+        removeClickMonitors()
         hidePanel()
+    }
+
+    /// Starts watching for clicks outside the HUD. A click in another app's
+    /// window reaches only the global monitor; a click in one of Tabby's own
+    /// windows (e.g. Settings) reaches the local one. Either cancels the switch
+    /// without activating the selection, and the click is passed through so the
+    /// clicked window comes forward as usual.
+    private func installClickMonitors() {
+        removeClickMonitors()
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.cancel() }
+        }) {
+            clickMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
+            MainActor.assumeIsolated {
+                if let self, event.window !== self.panel { self.cancel() }
+            }
+            return event
+        }) {
+            clickMonitors.append(local)
+        }
+    }
+
+    private func removeClickMonitors() {
+        clickMonitors.forEach(NSEvent.removeMonitor)
+        clickMonitors = []
     }
 
     private func loadThumbnails() {
