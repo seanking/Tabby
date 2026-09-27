@@ -494,10 +494,11 @@ final class SwitcherController: ObservableObject {
         }
     }
 
-    /// Re-fits the panel when the preview appears/disappears without moving the
-    /// existing list: the panel's top-left corner stays pinned so it only grows
-    /// or shrinks downward (the inline preview expands under the selected row),
-    /// animated so it eases open rather than the whole HUD jumping.
+    /// Re-fits the panel when the preview or filter bar appears/disappears
+    /// without moving the existing list: the panel's top-left corner stays pinned
+    /// so the list stays anchored while the preview pane opens out to the right
+    /// (and, if it's taller than the list, downward). Animated so it eases open
+    /// rather than the whole HUD jumping.
     private func resizePanelKeepingLeftEdge() {
         guard let panel else { return }
         Task { @MainActor in
@@ -509,12 +510,19 @@ final class SwitcherController: ObservableObject {
             // list stays anchored and only the right edge (and, if needed, the
             // bottom) moves.
             let current = panel.frame
-            let newFrame = NSRect(
+            var newFrame = NSRect(
                 x: current.minX,
                 y: current.maxY - size.height,
                 width: size.width,
                 height: size.height
             )
+
+            // A large preview can be wider than the list, so growing rightwards
+            // may run past the display; slide the panel back on screen in that
+            // case rather than letting the preview be clipped.
+            if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame, newFrame.maxX > visible.maxX {
+                newFrame.origin.x = max(visible.maxX - newFrame.width, visible.minX)
+            }
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.15
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)

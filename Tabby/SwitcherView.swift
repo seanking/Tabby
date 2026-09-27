@@ -4,6 +4,7 @@ struct SwitcherView: View {
     @ObservedObject var controller: SwitcherController
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
+    @AppStorage(SettingsKey.previewScale) private var previewScale = SettingsKey.defaultPreviewScale
 
     /// Name-label point size and app-icon side length at the current scale, so
     /// the "Size" control grows the text and icons together. `fontSize` also
@@ -12,7 +13,6 @@ struct SwitcherView: View {
     private var iconSize: CGFloat { SettingsKey.baseIconSize * scale }
 
     private let spacing: CGFloat = 4
-    private let previewHeight: CGFloat = 200
     private let scrollSpace = "switcherScroll"
 
     /// Y positions of the content's top and bottom edges within the scroll
@@ -22,6 +22,34 @@ struct SwitcherView: View {
     @State private var bottomEdgeY: CGFloat = 0
 
     var body: some View {
+        // The preview sits beside the list rather than under the selected row, so
+        // it can be sized freely: the list keeps its natural width and the pane
+        // extends the HUD to the right. Top-aligned so revealing a tall preview
+        // grows the panel downward instead of shifting the list.
+        HStack(alignment: .top, spacing: 0) {
+            listColumn
+            if let image = previewImage {
+                preview(image)
+            }
+        }
+        .background(
+            VisualEffectBackground(
+                material: .underWindowBackground,
+                blendingMode: .behindWindow,
+                cornerRadius: 20
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .fixedSize()
+    }
+
+    /// The window list itself: the filter field (when active) above a scrolling
+    /// column of rows.
+    private var listColumn: some View {
         VStack(spacing: 0) {
             if controller.filterActive {
                 filterBar
@@ -30,35 +58,27 @@ struct SwitcherView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: spacing) {
                     ForEach(Array(controller.windows.enumerated()), id: \.element.id) { index, window in
-                        VStack(spacing: spacing) {
-                            WindowRow(
-                                window: window,
-                                icon: controller.icons[window.pid],
-                                badge: controller.badges[window.pid],
-                                isSelected: index == controller.selectedIndex,
-                                iconSize: iconSize,
-                                nameWidth: nameColumnWidth
-                            )
-                            // Point the selection at whatever row the cursor is
-                            // over, and commit to it on click. Continuous
-                            // hover (rather than enter/exit) so the controller
-                            // sees every pointer position and can tell a
-                            // deliberate move — including one inside the row
-                            // the cursor already rests in — from the HUD
-                            // opening or reflowing underneath a still cursor.
-                            .contentShape(Rectangle())
-                            .onContinuousHover { phase in
-                                if case .active = phase { controller.hover(index: index) }
-                            }
-                            .onTapGesture {
-                                controller.choose(index: index)
-                            }
-
-                            // Live window preview, revealed inline under the row
-                            // once the user has dwelled on it (Cmd held ~2s).
-                            if let image = previewImage(for: window) {
-                                preview(image)
-                            }
+                        WindowRow(
+                            window: window,
+                            icon: controller.icons[window.pid],
+                            badge: controller.badges[window.pid],
+                            isSelected: index == controller.selectedIndex,
+                            iconSize: iconSize,
+                            nameWidth: nameColumnWidth
+                        )
+                        // Point the selection at whatever row the cursor is
+                        // over, and commit to it on click. Continuous hover
+                        // (rather than enter/exit) so the controller sees every
+                        // pointer position and can tell a deliberate move —
+                        // including one inside the row the cursor already rests
+                        // in — from the HUD opening or reflowing underneath a
+                        // still cursor.
+                        .contentShape(Rectangle())
+                        .onContinuousHover { phase in
+                            if case .active = phase { controller.hover(index: index) }
+                        }
+                        .onTapGesture {
+                            controller.choose(index: index)
                         }
                         .id(window.id)
                     }
@@ -108,19 +128,6 @@ struct SwitcherView: View {
             }
             }
         }
-        .background(
-            VisualEffectBackground(
-                material: .underWindowBackground,
-                blendingMode: .behindWindow,
-                cornerRadius: 20
-            )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .fixedSize()
     }
 
     /// The filter field pinned above the list while Cmd+F filtering is active.
@@ -181,27 +188,38 @@ struct SwitcherView: View {
         .allowsHitTesting(false)
     }
 
-    /// The captured window image to show under `window`, or nil when it isn't the
-    /// dwelled-on selection (or no thumbnail is available).
-    private func previewImage(for window: WindowInfo) -> NSImage? {
-        guard controller.previewWindowID == window.id else { return nil }
-        return controller.thumbnails[window.id]
+    /// The captured window image for the dwelled-on selection, or nil when no
+    /// window is being previewed (or no thumbnail is available for it yet).
+    private var previewImage: NSImage? {
+        guard let id = controller.previewWindowID else { return nil }
+        return controller.thumbnails[id]
     }
 
-    /// A live window snapshot, letterboxed into the list's width so the HUD only
-    /// grows downward when it appears — the left and right edges never move.
+    /// A live window snapshot, letterboxed into the preview pane beside the list.
+    /// The pane's size comes from the Preview "Size" setting alone, so it can be
+    /// as large as the screen allows regardless of how wide the rows are.
     private func preview(_ image: NSImage) -> some View {
         Image(nsImage: image)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .frame(width: rowContentWidth, height: previewHeight)
+            .frame(width: previewSize.width, height: previewSize.height)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
             )
-            .padding(.top, 2)
-            .padding(.bottom, 4)
+            // No leading padding: the list's own trailing padding already
+            // provides the gutter between the rows and the pane.
+            .padding(.trailing, 12)
+            .padding(.vertical, 12)
+    }
+
+    /// The preview pane's box at the current "Size" setting.
+    private var previewSize: CGSize {
+        switcherPreviewSize(
+            scale: previewScale,
+            screenSize: NSScreen.main?.visibleFrame.size ?? CGSize(width: 1200, height: 900)
+        )
     }
 
     private var maxColumnHeight: CGFloat {
@@ -209,22 +227,12 @@ struct SwitcherView: View {
         // A row is as tall as the larger of the icon and the (possibly enlarged)
         // name text, so the panel reserves enough height for big font sizes.
         let rowHeight = max(iconSize, (fontSize * 1.35).rounded(.up)) + 8
-        var naturalHeight = CGFloat(controller.windows.count) * (rowHeight + spacing) + spacing + 24
-        // Reserve room for the inline preview so the panel grows to fit it.
-        if previewVisible {
-            naturalHeight += previewHeight + spacing + 6
-        }
+        let naturalHeight = CGFloat(controller.windows.count) * (rowHeight + spacing) + spacing + 24
         return min(naturalHeight, screenHeight * 0.85)
     }
 
-    /// True when a dwell preview is currently showing (an image exists for it).
-    private var previewVisible: Bool {
-        guard let id = controller.previewWindowID else { return false }
-        return controller.thumbnails[id] != nil
-    }
-
     /// Width of a row's content (icon + gap + name column + row padding). The
-    /// inline preview is sized to this so the HUD's width never changes.
+    /// filter field is sized to this so it lines up with the rows.
     private var rowContentWidth: CGFloat {
         iconSize + 8 + nameColumnWidth + 16
     }
@@ -247,6 +255,22 @@ struct SwitcherView: View {
         // +2 guards against sub-pixel rounding that would clip the last glyph.
         return min(max(widest.rounded(.up) + 2, 80), screenWidth * 0.5)
     }
+}
+
+/// The size of the window preview pane at the Preview "Size" scale. The pane
+/// sits beside the list, so its size is independent of the rows: 100% is the
+/// baseline box and larger scales grow both dimensions together, keeping the
+/// box's shape (and so the snapshot's letterboxing) the same at any size.
+/// Capped to a fraction of the screen so an extreme scale can't push the HUD off
+/// the display. A free function so the layout math can be tested without
+/// building a view.
+func switcherPreviewSize(scale: Double, screenSize: CGSize) -> CGSize {
+    let range = SettingsKey.previewScaleRange
+    let clamped = min(max(scale, range.lowerBound), range.upperBound)
+    return CGSize(
+        width: min(SettingsKey.basePreviewWidth * clamped, screenSize.width * 0.6),
+        height: min(SettingsKey.basePreviewHeight * clamped, screenSize.height * 0.8)
+    )
 }
 
 /// Builds a window's row label: "AppName — Window Title", reducing multi-segment

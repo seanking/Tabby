@@ -9,6 +9,7 @@ enum SettingsKey {
     static let showBadges = "showBadges"
     static let showWindowPreview = "showWindowPreview"
     static let previewDwell = "previewDwell"
+    static let previewScale = "previewScale"
     static let activationDelay = "activationDelay"
     static let uiScale = "uiScale"
     static let iconReaction = "iconReaction"
@@ -47,6 +48,20 @@ enum SettingsKey {
 
     /// Baseline app-icon side length (points) at 100% scale.
     static let baseIconSize = 26.0
+
+    /// Multiplier applied to the window preview pane shown beside the list. 1.0
+    /// renders at the baseline size below; the Preview "Size" control grows it.
+    static let defaultPreviewScale = 1.0
+
+    /// Allowed range for `previewScale` (100%–300%), shared by the slider and
+    /// `switcherPreviewSize(scale:screenSize:)`'s clamping so a stored value
+    /// can't grow the preview past what the HUD can show.
+    static let previewScaleRange = 1.0...3.0
+
+    /// Baseline size (points) of the window preview pane at 100% scale. 16:10, so
+    /// a typical window snapshot nearly fills it.
+    static let basePreviewWidth = 320.0
+    static let basePreviewHeight = 200.0
 }
 
 /// A bit of whimsy: how the selected app icon reacts as you land on it while
@@ -383,6 +398,7 @@ private struct PreviewSettingsPane: View {
     @AppStorage(SettingsKey.iconReaction) private var iconReaction: IconReaction = .none
     @AppStorage(SettingsKey.showWindowPreview) private var showWindowPreview = true
     @AppStorage(SettingsKey.previewDwell) private var previewDwell = SettingsKey.defaultPreviewDwell
+    @AppStorage(SettingsKey.previewScale) private var previewScale = SettingsKey.defaultPreviewScale
 
     var body: some View {
         Form {
@@ -422,11 +438,22 @@ private struct PreviewSettingsPane: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+
+                    LabeledContent("Size") {
+                        HStack(spacing: 8) {
+                            Slider(value: $previewScale, in: SettingsKey.previewScaleRange, step: 0.25)
+                                .frame(width: 140)
+                            Text(previewScale.formatted(.percent.precision(.fractionLength(0))))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                                .frame(width: 44, alignment: .trailing)
+                        }
+                    }
                 }
             } header: {
                 Text("Preview")
             } footer: {
-                Text("Hold ⌘ on a window to preview it after the delay, or press P while switching.")
+                Text("Hold ⌘ on a window to preview it after the delay, or press P while switching. The preview appears beside the list; a larger size widens the switcher to fit it.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
