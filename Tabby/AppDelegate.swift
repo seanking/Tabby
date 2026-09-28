@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !AppDelegate.isRunningTests else { return }
 
         Self.applyDockIconVisibility()
+        Self.applyAppearance()
 
         // Opening Settings from the switcher HUD (⌘, while it's up) routes back
         // here so the same window logic serves the menu bar, ⌘,, and the HUD.
@@ -167,6 +168,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
+    }
+
+    // MARK: - Appearance
+
+    /// Applies Settings → Appearance → Theme app-wide. Setting `NSApp.appearance`
+    /// restyles every window — the switcher HUD, Settings, and the welcome
+    /// window — and nil lets them follow the system's light/dark setting.
+    static func applyAppearance() {
+        let raw = UserDefaults.standard.string(forKey: SettingsKey.appearanceMode)
+        let mode = raw.flatMap(AppearanceMode.init(rawValue:)) ?? .system
+        NSApp.appearance = mode.nsAppearance
     }
 
     // MARK: - First-launch onboarding

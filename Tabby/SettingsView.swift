@@ -15,6 +15,7 @@ enum SettingsKey {
     static let iconReaction = "iconReaction"
     static let hapticFeedback = "hapticFeedback"
     static let showDockIcon = "showDockIcon"
+    static let appearanceMode = "appearanceMode"
 
     /// Whether Tabby shows an icon in the Dock while running. Clicking it opens
     /// the switcher. Shared so the settings UI and `AppDelegate` agree when unset.
@@ -71,6 +72,35 @@ enum SettingsKey {
     /// a typical window snapshot nearly fills it.
     static let basePreviewWidth = 320.0
     static let basePreviewHeight = 200.0
+}
+
+/// Whether Tabby follows the system's light/dark setting or forces one. Stored
+/// by raw value in `UserDefaults` via `@AppStorage`, so the settings picker and
+/// `AppDelegate.applyAppearance()` agree on the current choice.
+enum AppearanceMode: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    /// Human-readable name for the settings picker.
+    var label: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    /// The app-wide appearance for this mode; nil follows the system.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
 }
 
 /// A bit of whimsy: how the selected app icon reacts as you land on it while
@@ -415,6 +445,7 @@ private struct GeneralSettingsPane: View {
 /// Switcher appearance and window-preview options: text/badge scaling plus
 /// whether to show the preview and how long to dwell.
 private struct PreviewSettingsPane: View {
+    @AppStorage(SettingsKey.appearanceMode) private var appearanceMode: AppearanceMode = .system
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
@@ -426,6 +457,16 @@ private struct PreviewSettingsPane: View {
     var body: some View {
         Form {
             Section("Appearance") {
+                Picker("Theme", selection: $appearanceMode) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: appearanceMode) {
+                    AppDelegate.applyAppearance()
+                }
+
                 Toggle("Show app name", isOn: $showAppName)
                 Toggle("Show badges on icons", isOn: $showBadges)
 

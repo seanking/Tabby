@@ -41,7 +41,7 @@ struct SwitcherView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .fixedSize()
@@ -151,7 +151,7 @@ struct SwitcherView: View {
         .frame(width: rowContentWidth, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.18))
+                .fill(Color.primary.opacity(0.08))
         )
         .padding(.horizontal, 12)
         .padding(.top, 12)
@@ -206,7 +206,7 @@ struct SwitcherView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
             )
             // No leading padding: the list's own trailing padding already
             // provides the gutter between the rows and the pane.
@@ -381,7 +381,7 @@ private struct WindowRow: View {
                 .font(.system(size: fontSize))
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .foregroundStyle(Color.black)
+                .foregroundStyle(Color.primary)
                 .frame(width: nameWidth, alignment: .leading)
         }
         .padding(.horizontal, 8)
