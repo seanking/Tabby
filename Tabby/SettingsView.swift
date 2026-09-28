@@ -16,10 +16,15 @@ enum SettingsKey {
     static let hapticFeedback = "hapticFeedback"
     static let showDockIcon = "showDockIcon"
     static let appearanceMode = "appearanceMode"
+    static let showMenuBarWindows = "showMenuBarWindows"
 
     /// Whether Tabby shows an icon in the Dock while running. Clicking it opens
     /// the switcher. Shared so the settings UI and `AppDelegate` agree when unset.
     static let defaultShowDockIcon = true
+
+    /// Whether the menu bar item's menu lists open windows grouped by app, like
+    /// the Dock menu. Shared so the settings UI and `AppDelegate` agree when unset.
+    static let defaultShowMenuBarWindows = true
 
     /// Whether the window preview is shown by default. Shared so the settings UI
     /// and the switcher agree when no value has been stored yet.
@@ -380,6 +385,7 @@ private struct GeneralSettingsPane: View {
     @AppStorage(SettingsKey.activationDelay) private var activationDelay = SettingsKey.defaultActivationDelay
     @AppStorage(SettingsKey.hapticFeedback) private var hapticFeedback = SettingsKey.defaultHapticFeedback
     @AppStorage(SettingsKey.showDockIcon) private var showDockIcon = SettingsKey.defaultShowDockIcon
+    @AppStorage(SettingsKey.showMenuBarWindows) private var showMenuBarWindows = SettingsKey.defaultShowMenuBarWindows
     @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
@@ -400,6 +406,16 @@ private struct GeneralSettingsPane: View {
                 Text("Dock")
             } footer: {
                 Text("Show Tabby in the Dock while it's running. Click the Dock icon to open the switcher.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("List apps in menu bar menu", isOn: $showMenuBarWindows)
+            } header: {
+                Text("Menu Bar")
+            } footer: {
+                Text("Show your open apps in Tabby's menu bar menu. Each app's submenu lists its windows; pick one to switch to it.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

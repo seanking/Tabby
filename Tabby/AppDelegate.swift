@@ -2,12 +2,13 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
     private let switcher = SwitcherController()
     private let windowManager = WindowManager()
     private var permissionPollTimer: Timer?
     private var welcomeWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var statusItem: NSStatusItem?
 
     /// Whether the first-launch welcome/permissions window has been dismissed.
     /// Persisted so onboarding only appears the first time Tabby runs.
@@ -17,13 +18,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         // When the app is only acting as the unit-test host, skip all runtime
-        // side effects: no Accessibility permission prompt and no global event
-        // tap. (The menu-bar item is a SwiftUI `MenuBarExtra` scene gated on the
-        // same flag.)
+        // side effects: no Accessibility permission prompt, no global event tap,
+        // and no menu-bar item.
         guard !AppDelegate.isRunningTests else { return }
 
         Self.applyDockIconVisibility()
         Self.applyAppearance()
+        installStatusItem()
 
         // Opening Settings from the switcher HUD (⌘, while it's up) routes back
         // here so the same window logic serves the menu bar, ⌘,, and the HUD.
@@ -99,49 +100,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// always current. Picking a window raises it just like the switcher. A
     /// Settings item follows the window list.
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
-        let groups = dockMenuGroups(for: windowManager.listWindows())
-
         let menu = NSMenu()
-        for group in groups {
-            let submenu = NSMenu(title: group.appName)
-            for window in group.windows {
-                let item = NSMenuItem(
-                    title: switcherDisplayName(for: window, showAppName: false),
-                    action: #selector(activateDockMenuWindow(_:)),
-                    keyEquivalent: ""
-                )
-                item.target = self
-                item.representedObject = window
-                submenu.addItem(item)
-            }
-
-            let appItem = NSMenuItem(title: group.appName, action: nil, keyEquivalent: "")
-            appItem.image = menuIcon(for: group.pid)
-            appItem.submenu = submenu
-            menu.addItem(appItem)
-        }
-
-        if !groups.isEmpty {
-            menu.addItem(.separator())
-        }
-        let settingsItem = NSMenuItem(
-            title: "Settings…",
-            action: #selector(openSettingsFromDockMenu(_:)),
-            keyEquivalent: ""
+        populateDockMenu(
+            menu,
+            groups: dockMenuGroups(for: windowManager.listWindows()),
+            target: self,
+            icon: menuIcon(for:)
         )
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
         return menu
     }
 
-    @objc private func activateDockMenuWindow(_ sender: NSMenuItem) {
+    @objc func activateMenuWindow(_ sender: NSMenuItem) {
         guard let window = sender.representedObject as? WindowInfo else { return }
         windowManager.activate(window)
     }
 
-    @objc private func openSettingsFromDockMenu(_ sender: NSMenuItem) {
+    @objc func openSettingsFromMenu(_ sender: NSMenuItem) {
         openSettings()
+    }
+
+    // MARK: - Menu bar item
+
+    /// Adds Tabby's menu-bar item. Owned here as an `NSStatusItem` rather than a
+    /// SwiftUI `MenuBarExtra` so its menu can be rebuilt every time it opens (see
+    /// `menuNeedsUpdate(_:)`), keeping the window list current.
+    private func installStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(systemSymbolName: "square.stack", accessibilityDescription: "Tabby")
+
+        let menu = NSMenu()
+        menu.delegate = self
+        item.menu = menu
+        statusItem = item
+    }
+
+    /// Rebuilds the menu-bar menu just before it opens: Open Tabby, then (when
+    /// enabled in Settings → General → Menu Bar) every switchable window grouped
+    /// by app, then Settings and Quit.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === statusItem?.menu else { return }
+        // Skip enumerating windows entirely when the list is turned off.
+        let showWindows = Self.isMenuBarWindowListEnabled()
+        populateStatusMenu(
+            menu,
+            groups: showWindows ? dockMenuGroups(for: windowManager.listWindows()) : [],
+            showWindows: showWindows,
+            target: self,
+            icon: menuIcon(for:)
+        )
+    }
+
+    @objc func openSwitcherFromMenu(_ sender: NSMenuItem) {
+        openSwitcher()
+    }
+
+    /// Whether Settings → General → Menu Bar's app list is on, falling back to
+    /// the default (on) when the user hasn't chosen yet.
+    static func isMenuBarWindowListEnabled(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: SettingsKey.showMenuBarWindows) as? Bool ?? SettingsKey.defaultShowMenuBarWindows
     }
 
     /// The app's icon scaled down to menu-row size.
@@ -272,4 +288,97 @@ func dockMenuGroups(for windows: [WindowInfo]) -> [DockMenuGroup] {
             case .orderedSame: return lhs.pid < rhs.pid
             }
         }
+}
+
+/// Appends one row (icon + app name) per group, each with a submenu of that
+/// app's windows. Picking a window sends `activateMenuWindow(_:)` to `target`
+/// with the `WindowInfo` as the item's `representedObject`. Shared by the Dock
+/// and menu-bar menus. Returns whether any rows were added, so callers can
+/// decide on a trailing separator.
+@MainActor
+@discardableResult
+func appendWindowGroupItems(
+    to menu: NSMenu,
+    groups: [DockMenuGroup],
+    target: AnyObject?,
+    icon: (pid_t) -> NSImage?
+) -> Bool {
+    for group in groups {
+        let submenu = NSMenu(title: group.appName)
+        for window in group.windows {
+            let item = NSMenuItem(
+                title: switcherDisplayName(for: window, showAppName: false),
+                action: #selector(AppDelegate.activateMenuWindow(_:)),
+                keyEquivalent: ""
+            )
+            item.target = target
+            item.representedObject = window
+            submenu.addItem(item)
+        }
+
+        let appItem = NSMenuItem(title: group.appName, action: nil, keyEquivalent: "")
+        appItem.image = icon(group.pid)
+        appItem.submenu = submenu
+        menu.addItem(appItem)
+    }
+
+    return !groups.isEmpty
+}
+
+/// Fills the Dock icon's right-click menu: the app/window list, then Settings.
+@MainActor
+func populateDockMenu(
+    _ menu: NSMenu,
+    groups: [DockMenuGroup],
+    target: AnyObject?,
+    icon: (pid_t) -> NSImage?
+) {
+    if appendWindowGroupItems(to: menu, groups: groups, target: target, icon: icon) {
+        menu.addItem(.separator())
+    }
+    let settingsItem = NSMenuItem(
+        title: "Settings…",
+        action: #selector(AppDelegate.openSettingsFromMenu(_:)),
+        keyEquivalent: ""
+    )
+    settingsItem.target = target
+    menu.addItem(settingsItem)
+}
+
+/// Rebuilds the menu-bar menu in place: Open Tabby, then (when `showWindows` is
+/// on) the app/window list, then Settings and Quit. Clears any existing items
+/// first, since the same menu is refilled every time it opens.
+@MainActor
+func populateStatusMenu(
+    _ menu: NSMenu,
+    groups: [DockMenuGroup],
+    showWindows: Bool,
+    target: AnyObject?,
+    icon: (pid_t) -> NSImage?
+) {
+    menu.removeAllItems()
+
+    let openItem = NSMenuItem(
+        title: "Open Tabby",
+        action: #selector(AppDelegate.openSwitcherFromMenu(_:)),
+        keyEquivalent: ""
+    )
+    openItem.target = target
+    menu.addItem(openItem)
+    menu.addItem(.separator())
+
+    if showWindows, appendWindowGroupItems(to: menu, groups: groups, target: target, icon: icon) {
+        menu.addItem(.separator())
+    }
+
+    let settingsItem = NSMenuItem(
+        title: "Settings…",
+        action: #selector(AppDelegate.openSettingsFromMenu(_:)),
+        keyEquivalent: ","
+    )
+    settingsItem.target = target
+    menu.addItem(settingsItem)
+    menu.addItem(.separator())
+
+    menu.addItem(NSMenuItem(title: "Quit Tabby", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 }
