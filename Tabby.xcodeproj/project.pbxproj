@@ -273,6 +273,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Tabby/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Tabby;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -371,6 +372,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Tabby/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Tabby-Dev";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -378,7 +380,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				MARKETING_VERSION = 1.2;
-				PRODUCT_BUNDLE_IDENTIFIER = dev.seanking.Tabby;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.seanking.Tabby.dev;
 				PRODUCT_NAME = Tabby;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
