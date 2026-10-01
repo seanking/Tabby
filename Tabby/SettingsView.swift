@@ -17,6 +17,11 @@ enum SettingsKey {
     static let showDockIcon = "showDockIcon"
     static let appearanceMode = "appearanceMode"
     static let showMenuBarWindows = "showMenuBarWindows"
+    static let alwaysShowFilter = "alwaysShowFilter"
+
+    /// Whether the switcher's filter bar is always shown, rather than only after
+    /// Cmd+F. Shared so the settings UI and the switcher agree when unset.
+    static let defaultAlwaysShowFilter = true
 
     /// Whether Tabby shows an icon in the Dock while running. Clicking it opens
     /// the switcher. Shared so the settings UI and `AppDelegate` agree when unset.
@@ -466,6 +471,7 @@ private struct PreviewSettingsPane: View {
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
     @AppStorage(SettingsKey.iconReaction) private var iconReaction: IconReaction = .none
+    @AppStorage(SettingsKey.alwaysShowFilter) private var alwaysShowFilter = SettingsKey.defaultAlwaysShowFilter
     @AppStorage(SettingsKey.showWindowPreview) private var showWindowPreview = SettingsKey.defaultShowWindowPreview
     @AppStorage(SettingsKey.previewDwell) private var previewDwell = SettingsKey.defaultPreviewDwell
     @AppStorage(SettingsKey.previewScale) private var previewScale = SettingsKey.defaultPreviewScale
@@ -485,6 +491,7 @@ private struct PreviewSettingsPane: View {
 
                 Toggle("Show app name", isOn: $showAppName)
                 Toggle("Show badges on icons", isOn: $showBadges)
+                Toggle("Always show filter", isOn: $alwaysShowFilter)
 
                 LabeledContent("Size") {
                     HStack(spacing: 8) {

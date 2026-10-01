@@ -257,6 +257,14 @@ final class SwitcherController: ObservableObject {
         applyFilter()
     }
 
+    /// Empties the filter query (the filter bar's clear button) and restores the
+    /// full list. The filter stays active so the user can keep typing.
+    func clearFilter() {
+        guard !filterText.isEmpty else { return }
+        filterText = ""
+        applyFilter()
+    }
+
     /// Recomputes the displayed list from the full snapshot and the current
     /// query, keeping the selection on the first match, then re-fits the panel.
     private func applyFilter() {

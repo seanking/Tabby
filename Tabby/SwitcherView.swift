@@ -5,6 +5,7 @@ struct SwitcherView: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
     @AppStorage(SettingsKey.previewScale) private var previewScale = SettingsKey.defaultPreviewScale
+    @AppStorage(SettingsKey.alwaysShowFilter) private var alwaysShowFilter = SettingsKey.defaultAlwaysShowFilter
 
     /// Name-label point size and app-icon side length at the current scale, so
     /// the "Size" control grows the text and icons together. `fontSize` also
@@ -47,11 +48,11 @@ struct SwitcherView: View {
         .fixedSize()
     }
 
-    /// The window list itself: the filter field (when active) above a scrolling
-    /// column of rows.
+    /// The window list itself: the filter field (always, or only while active,
+    /// per the "Always show filter" setting) above a scrolling column of rows.
     private var listColumn: some View {
         VStack(spacing: 0) {
-            if controller.filterActive {
+            if alwaysShowFilter || controller.filterActive {
                 filterBar
             }
             ScrollViewReader { proxy in
@@ -130,18 +131,29 @@ struct SwitcherView: View {
         }
     }
 
-    /// The filter field pinned above the list while Cmd+F filtering is active.
-    /// Input is fed in through the event tap (the panel can't take key focus), so
-    /// this only mirrors the current query rather than being an editable field.
+    /// The filter field pinned above the list. Input is fed in through the event
+    /// tap once Cmd+F starts filtering (the panel can't take key focus), so this
+    /// only mirrors the current query rather than being an editable field. The
+    /// trailing X clears the query while keeping the filter active.
     private var filterBar: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            Text(controller.filterText.isEmpty ? "Filter" : controller.filterText)
+            Text(controller.filterText.isEmpty ? filterPlaceholder : controller.filterText)
                 .foregroundStyle(controller.filterText.isEmpty ? Color.secondary : Color.black)
                 .lineLimit(1)
                 .truncationMode(.head)
             Spacer(minLength: 0)
+            if !controller.filterText.isEmpty {
+                Button {
+                    controller.clearFilter()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear filter")
+            }
         }
         .font(.body)
         .padding(.horizontal, 10)
@@ -155,6 +167,12 @@ struct SwitcherView: View {
         )
         .padding(.horizontal, 12)
         .padding(.top, 12)
+    }
+
+    /// Placeholder for an empty query. Typing only reaches the filter after
+    /// Cmd+F, so the always-visible bar hints at the shortcut until then.
+    private var filterPlaceholder: String {
+        controller.filterActive ? "Filter" : "⌘F to filter"
     }
 
     /// Whether rows extend above the visible area (something scrolled off the top):
