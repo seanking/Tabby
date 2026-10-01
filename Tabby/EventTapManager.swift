@@ -83,6 +83,14 @@ final class EventTapManager {
         isLatched = true
     }
 
+    /// Turns on filtering for the live session, as Cmd+F would — used when the
+    /// user clicks the switcher's filter bar. Typed keys then build the query
+    /// and releasing Cmd no longer commits. No-op outside a session.
+    func beginFiltering() {
+        guard isSwitcherActive else { return }
+        isFiltering = true
+    }
+
     /// Clears all in-session state so the next Cmd+Tab starts clean. Called by
     /// the controller whenever a switch ends, covering exits the tap doesn't
     /// observe as a keystroke (e.g. quitting the last window of a filtered app,

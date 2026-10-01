@@ -165,14 +165,29 @@ struct SwitcherView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.primary.opacity(0.08))
         )
+        // Accent focus ring while filtering, like a focused macOS text field, so
+        // it's obvious that typing now goes into the filter.
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.accentColor, lineWidth: 2)
+                .opacity(controller.filterActive ? 1 : 0)
+        )
+        .animation(.easeOut(duration: 0.15), value: controller.filterActive)
+        // Clicking anywhere in the bar (other than the clear button) starts
+        // filtering, as Cmd+F does.
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture {
+            controller.beginFilterFromClick()
+        }
         .padding(.horizontal, 12)
         .padding(.top, 12)
     }
 
-    /// Placeholder for an empty query. Typing only reaches the filter after
-    /// Cmd+F, so the always-visible bar hints at the shortcut until then.
+    /// Placeholder for an empty query. Typing only reaches the filter after a
+    /// click or Cmd+F, so the always-visible bar hints at both until then, and
+    /// prompts for input once the filter has focus.
     private var filterPlaceholder: String {
-        controller.filterActive ? "Filter" : "⌘F to filter"
+        controller.filterActive ? "Type to filter…" : "Click or ⌘F to filter"
     }
 
     /// Whether rows extend above the visible area (something scrolled off the top):

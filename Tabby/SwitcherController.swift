@@ -243,6 +243,13 @@ final class SwitcherController: ObservableObject {
         resizePanelKeepingLeftEdge()
     }
 
+    /// Clicking the filter bar: start filtering exactly as Cmd+F does, so the
+    /// event tap routes typed keys into the query.
+    func beginFilterFromClick() {
+        eventTap.beginFiltering()
+        activateFilter()
+    }
+
     /// Appends typed text to the filter query and re-applies it.
     private func appendFilter(_ text: String) {
         guard filterActive else { return }
