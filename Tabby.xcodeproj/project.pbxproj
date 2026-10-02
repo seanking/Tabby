@@ -67,7 +67,7 @@
 		C7C5EE11AF673062D08F3EF1 /* KeyDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyDecisionTests.swift; sourceTree = "<group>"; };
 		D27BE6A2FDC38B53A649728C /* WindowInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowInfo.swift; sourceTree = "<group>"; };
 		DFEC69CEF0FB711B7AD0B04F /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
-		EBDA9DB3299E15402C8C6C3F /* Tabby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Tabby.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EBDA9DB3299E15402C8C6C3F /* Tabby-Dev.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tabby-Dev.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		EE04BB594F55A14D7517EA4A /* WindowInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowInfoTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -122,7 +122,7 @@
 		F69D3A9E58E0F3DB97716113 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				EBDA9DB3299E15402C8C6C3F /* Tabby.app */,
+				EBDA9DB3299E15402C8C6C3F /* Tabby-Dev.app */,
 				96ABCA0AB2E02B3A188DAA9B /* TabbyTests.xctest */,
 			);
 			name = Products;
@@ -146,7 +146,7 @@
 			packageProductDependencies = (
 			);
 			productName = Tabby;
-			productReference = EBDA9DB3299E15402C8C6C3F /* Tabby.app */;
+			productReference = EBDA9DB3299E15402C8C6C3F /* Tabby-Dev.app */;
 			productType = "com.apple.product-type.application";
 		};
 		DE779FF2B4341B6C98E0315E /* TabbyTests */ = {
@@ -381,7 +381,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.seanking.Tabby.dev;
-				PRODUCT_NAME = Tabby;
+				PRODUCT_NAME = "Tabby-Dev";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
 			};
