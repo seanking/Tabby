@@ -4,7 +4,6 @@ struct SwitcherView: View {
     @ObservedObject var controller: SwitcherController
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
-    @AppStorage(SettingsKey.previewScale) private var previewScale = SettingsKey.defaultPreviewScale
     @AppStorage(SettingsKey.alwaysShowFilter) private var alwaysShowFilter = SettingsKey.defaultAlwaysShowFilter
 
     /// Name-label point size and app-icon side length at the current scale, so
@@ -23,16 +22,10 @@ struct SwitcherView: View {
     @State private var bottomEdgeY: CGFloat = 0
 
     var body: some View {
-        // The preview sits beside the list rather than under the selected row, so
-        // it can be sized freely: the list keeps its natural width and the pane
-        // extends the HUD to the right. Top-aligned so revealing a tall preview
-        // grows the panel downward instead of shifting the list.
-        HStack(alignment: .top, spacing: 0) {
-            listColumn
-            if let image = previewImage {
-                preview(image)
-            }
-        }
+        // The window preview isn't drawn here: it floats in its own card panel
+        // beside the HUD (see `PreviewCardView`), so the switcher never changes
+        // shape when it appears.
+        listColumn
         .background(
             VisualEffectBackground(
                 material: .underWindowBackground,
@@ -81,6 +74,19 @@ struct SwitcherView: View {
                         .onTapGesture {
                             controller.choose(index: index)
                         }
+                        // Report where the selected row is, so the preview
+                        // card's notch can point at it (and follow it as the
+                        // list scrolls).
+                        .background {
+                            if index == controller.selectedIndex {
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: SelectedRowFrameKey.self,
+                                        value: geo.frame(in: .global)
+                                    )
+                                }
+                            }
+                        }
                         .id(window.id)
                     }
                 }
@@ -108,6 +114,7 @@ struct SwitcherView: View {
             .frame(height: maxColumnHeight)
             .onPreferenceChange(TopEdgeKey.self) { topEdgeY = $0 }
             .onPreferenceChange(BottomEdgeKey.self) { bottomEdgeY = $0 }
+            .onPreferenceChange(SelectedRowFrameKey.self) { controller.selectedRowFrameChanged($0) }
             .overlay(alignment: .top) {
                 if canScrollUp { scrollChevron(up: true) }
             }
@@ -221,40 +228,6 @@ struct SwitcherView: View {
         .allowsHitTesting(false)
     }
 
-    /// The captured window image for the dwelled-on selection, or nil when no
-    /// window is being previewed (or no thumbnail is available for it yet).
-    private var previewImage: NSImage? {
-        guard let id = controller.previewWindowID else { return nil }
-        return controller.thumbnails[id]
-    }
-
-    /// A live window snapshot, letterboxed into the preview pane beside the list.
-    /// The pane's size comes from the Preview "Size" setting alone, so it can be
-    /// as large as the screen allows regardless of how wide the rows are.
-    private func preview(_ image: NSImage) -> some View {
-        Image(nsImage: image)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: previewSize.width, height: previewSize.height)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-            )
-            // No leading padding: the list's own trailing padding already
-            // provides the gutter between the rows and the pane.
-            .padding(.trailing, 12)
-            .padding(.vertical, 12)
-    }
-
-    /// The preview pane's box at the current "Size" setting.
-    private var previewSize: CGSize {
-        switcherPreviewSize(
-            scale: previewScale,
-            screenSize: NSScreen.main?.visibleFrame.size ?? CGSize(width: 1200, height: 900)
-        )
-    }
-
     private var maxColumnHeight: CGFloat {
         let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
         // A row is as tall as the larger of the icon and the (possibly enlarged)
@@ -290,12 +263,11 @@ struct SwitcherView: View {
     }
 }
 
-/// The size of the window preview pane at the Preview "Size" scale. The pane
-/// sits beside the list, so its size is independent of the rows: 100% is the
-/// baseline box and larger scales grow both dimensions together, keeping the
-/// box's shape (and so the snapshot's letterboxing) the same at any size.
-/// Capped to a fraction of the screen so an extreme scale can't push the HUD off
-/// the display. A free function so the layout math can be tested without
+/// The largest box the window snapshot may fill at the Preview "Size" scale;
+/// the preview card fits the snapshot inside it at the window's own aspect
+/// ratio. 100% is the baseline box and larger scales grow both dimensions
+/// together. Capped to a fraction of the screen so an extreme scale can't
+/// cover the display. A free function so the layout math can be tested without
 /// building a view.
 func switcherPreviewSize(scale: Double, screenSize: CGSize) -> CGSize {
     let range = SettingsKey.previewScaleRange
@@ -496,11 +468,13 @@ private struct IconReactionValues {
 /// `behindWindow` blending so it blurs the desktop and windows *behind* the
 /// panel (SwiftUI materials and `glassEffect` only composite an opaque slab in
 /// a borderless panel). Corners are rounded at the layer level so the material
-/// clips cleanly.
-private struct VisualEffectBackground: NSViewRepresentable {
+/// clips cleanly; for other outlines (the preview card's notch), pass a
+/// `maskImage` instead.
+struct VisualEffectBackground: NSViewRepresentable {
     let material: NSVisualEffectView.Material
     let blendingMode: NSVisualEffectView.BlendingMode
     var cornerRadius: CGFloat = 0
+    var maskImage: NSImage? = nil
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
@@ -512,6 +486,7 @@ private struct VisualEffectBackground: NSViewRepresentable {
         view.layer?.cornerRadius = cornerRadius
         view.layer?.cornerCurve = .continuous
         view.layer?.masksToBounds = true
+        view.maskImage = maskImage
         return view
     }
 
@@ -519,6 +494,16 @@ private struct VisualEffectBackground: NSViewRepresentable {
         nsView.material = material
         nsView.blendingMode = blendingMode
         nsView.layer?.cornerRadius = cornerRadius
+        nsView.maskImage = maskImage
+    }
+}
+
+/// The selected row's frame in the HUD's coordinates (top-left origin), or nil
+/// when the selected row isn't laid out (e.g. the list is empty).
+private struct SelectedRowFrameKey: PreferenceKey {
+    static let defaultValue: CGRect? = nil
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) {
+        value = value ?? nextValue()
     }
 }
 

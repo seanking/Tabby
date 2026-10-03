@@ -69,7 +69,7 @@ enum SettingsKey {
     /// Baseline app-icon side length (points) at 100% scale.
     static let baseIconSize = 26.0
 
-    /// Multiplier applied to the window preview pane shown beside the list. 1.0
+    /// Multiplier applied to the window preview card shown beside the list. 1.0
     /// renders at the baseline size below; the Preview "Size" control grows it.
     static let defaultPreviewScale = 1.0
 
@@ -78,8 +78,8 @@ enum SettingsKey {
     /// can't grow the preview past what the HUD can show.
     static let previewScaleRange = 1.0...3.0
 
-    /// Baseline size (points) of the window preview pane at 100% scale. 16:10, so
-    /// a typical window snapshot nearly fills it.
+    /// Baseline box (points) the window snapshot is fitted into at 100% scale.
+    /// 16:10, so a typical window snapshot nearly fills it.
     static let basePreviewWidth = 320.0
     static let basePreviewHeight = 200.0
 }
@@ -525,22 +525,24 @@ private struct PreviewSettingsPane: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                }
 
-                    LabeledContent("Size") {
-                        HStack(spacing: 8) {
-                            Slider(value: $previewScale, in: SettingsKey.previewScaleRange, step: 0.25)
-                                .frame(width: 140)
-                            Text(previewScale.formatted(.percent.precision(.fractionLength(0))))
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                                .frame(width: 44, alignment: .trailing)
-                        }
+                // Always available: the toggle only governs the automatic
+                // dwell preview, and pressing P shows the preview regardless.
+                LabeledContent("Size") {
+                    HStack(spacing: 8) {
+                        Slider(value: $previewScale, in: SettingsKey.previewScaleRange, step: 0.25)
+                            .frame(width: 140)
+                        Text(previewScale.formatted(.percent.precision(.fractionLength(0))))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
                     }
                 }
             } header: {
                 Text("Preview")
             } footer: {
-                Text("Hold ⌘ on a window to preview it after the delay, or press P while switching. The preview appears beside the list; a larger size widens the switcher to fit it.")
+                Text("Hold ⌘ on a window to preview it after the delay, or press P while switching. The preview appears in a card beside the switcher; click it to switch to that window.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

@@ -20,6 +20,8 @@ final class SwitcherController: ObservableObject {
     /// Window whose large preview is shown after the user dwells on it. Nil until
     /// the dwell delay elapses without the selection changing.
     @Published private(set) var previewWindowID: CGWindowID?
+    /// Size and placement of the floating preview card, or nil while it's hidden.
+    @Published private(set) var previewCard: PreviewCardLayout?
 
     /// Whether the filter field is showing (toggled on by Cmd+F).
     @Published private(set) var filterActive = false
@@ -48,6 +50,12 @@ final class SwitcherController: ObservableObject {
     private let eventTap = EventTapManager()
     private let windowManager = WindowManager()
     private var panel: SwitcherPanel?
+    /// Separate panel holding the preview card beside the HUD, so showing a
+    /// preview never resizes or moves the switcher itself.
+    private var previewPanel: SwitcherPanel?
+    /// The selected row's frame within the HUD (top-left origin), reported by
+    /// the view so the preview card can point at it.
+    private var selectedRowFrame: CGRect?
     private var thumbnailTask: Task<Void, Never>?
 
     /// Pending timer that reveals the HUD if Cmd is still held after the delay.
@@ -84,6 +92,11 @@ final class SwitcherController: ObservableObject {
     /// before its preview appears, from Settings.
     private var previewDwell: TimeInterval {
         UserDefaults.standard.object(forKey: SettingsKey.previewDwell) as? Double ?? SettingsKey.defaultPreviewDwell
+    }
+
+    /// The Preview "Size" setting's scale for the snapshot's maximum box.
+    private var previewScale: Double {
+        UserDefaults.standard.object(forKey: SettingsKey.previewScale) as? Double ?? SettingsKey.defaultPreviewScale
     }
 
     /// Whether to tick the trackpad as the selection moves (Settings → Feedback).
@@ -199,7 +212,7 @@ final class SwitcherController: ObservableObject {
         dwellTask?.cancel()
         if previewWindowID != nil {
             previewWindowID = nil
-            resizePanelKeepingLeftEdge()
+            updatePreviewCard()
         }
         guard isPanelPresented, previewEnabled else { return }
         dwellTask = Task { [weak self, dwell = previewDwell] in
@@ -212,7 +225,7 @@ final class SwitcherController: ObservableObject {
     private func showDwellPreview() {
         guard isPanelPresented, windows.indices.contains(selectedIndex) else { return }
         previewWindowID = windows[selectedIndex].id
-        resizePanelKeepingLeftEdge()
+        updatePreviewCard()
     }
 
     /// Pressing "P" while switching shows the preview immediately (skipping the
@@ -223,10 +236,86 @@ final class SwitcherController: ObservableObject {
         dwellTask?.cancel()
         if previewWindowID != nil {
             previewWindowID = nil
-            resizePanelKeepingLeftEdge()
+            updatePreviewCard()
         } else {
             showDwellPreview()
         }
+    }
+
+    /// The view reports the selected row's frame whenever it changes (a new
+    /// selection, or the list scrolling), so a showing card keeps pointing at it.
+    func selectedRowFrameChanged(_ frame: CGRect?) {
+        selectedRowFrame = frame
+        if previewWindowID != nil { updatePreviewCard() }
+    }
+
+    /// Clicking the preview card switches to the window it shows.
+    func choosePreviewed() {
+        guard let id = previewWindowID, let index = windows.firstIndex(where: { $0.id == id }) else { return }
+        choose(index: index)
+    }
+
+    /// Shows, moves, or hides the preview card to match `previewWindowID`. The
+    /// card waits for the window's snapshot, then sits beside the HUD pointing
+    /// at the selected row; the HUD itself is never touched.
+    private func updatePreviewCard() {
+        guard
+            let id = previewWindowID,
+            let image = thumbnails[id],
+            windows.contains(where: { $0.id == id }),
+            let panel, panel.isVisible,
+            let visible = (panel.screen ?? NSScreen.main)?.visibleFrame
+        else {
+            hidePreviewCard()
+            return
+        }
+
+        // Row frames are top-left based within the HUD; screen space is
+        // bottom-left based.
+        let hud = panel.frame
+        let anchorY = selectedRowFrame.map { hud.maxY - $0.midY } ?? hud.midY
+        let layout = previewCardLayout(
+            imageSize: image.size,
+            maxImageSize: switcherPreviewSize(scale: previewScale, screenSize: visible.size),
+            hudFrame: hud,
+            anchorY: anchorY,
+            visibleFrame: visible
+        )
+        guard layout != previewCard || previewPanel?.isVisible != true else { return }
+        previewCard = layout
+
+        let card = previewPanel ?? makePreviewPanel()
+        previewPanel = card
+        let isAppearing = !card.isVisible
+        card.contentViewController?.view.layoutSubtreeIfNeeded()
+        card.setFrame(layout.frame, display: true)
+        if isAppearing {
+            // Fade in rather than pop, so it reads as a peek at the window.
+            card.alphaValue = 0
+            card.orderFrontRegardless()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.15
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                card.animator().alphaValue = 1
+            }
+        }
+        // Re-derive the shadow from the notched outline once SwiftUI has drawn it.
+        Task { @MainActor in card.invalidateShadow() }
+    }
+
+    private func hidePreviewCard() {
+        previewPanel?.orderOut(nil)
+        previewCard = nil
+    }
+
+    private func makePreviewPanel() -> SwitcherPanel {
+        let panel = SwitcherPanel()
+        let hosting = NSHostingController(rootView: PreviewCardView(controller: self))
+        // The card is sized from `previewCard`; don't let the hosting controller
+        // resize the panel on its own.
+        hosting.sizingOptions = []
+        panel.contentViewController = hosting
+        return panel
     }
 
     // MARK: - Filter
@@ -238,7 +327,10 @@ final class SwitcherController: ObservableObject {
         presentPanel()
         guard !filterActive else { return }
         dwellTask?.cancel()
-        if previewWindowID != nil { previewWindowID = nil }
+        if previewWindowID != nil {
+            previewWindowID = nil
+            updatePreviewCard()
+        }
         filterActive = true
         resizePanelKeepingLeftEdge()
     }
@@ -391,6 +483,11 @@ final class SwitcherController: ObservableObject {
 
         windows = result.windows
         selectedIndex = result.selectedIndex
+        // The selection moved and the HUD is about to re-center, so drop any
+        // preview rather than leave it pointing at a quit app's window.
+        dwellTask?.cancel()
+        previewWindowID = nil
+        hidePreviewCard()
         resizePanelToFit()
     }
 
@@ -461,6 +558,8 @@ final class SwitcherController: ObservableObject {
         dwellTask?.cancel()
         dwellTask = nil
         previewWindowID = nil
+        hidePreviewCard()
+        selectedRowFrame = nil
         filterActive = false
         filterText = ""
         allWindows = []
@@ -489,7 +588,9 @@ final class SwitcherController: ObservableObject {
         }
         if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
             MainActor.assumeIsolated {
-                if let self, event.window !== self.panel { self.cancel() }
+                if let self, event.window !== self.panel, event.window !== self.previewPanel {
+                    self.cancel()
+                }
             }
             return event
         }) {
@@ -516,10 +617,10 @@ final class SwitcherController: ObservableObject {
                         // preview later when it's hidden/minimized and can't be
                         // captured live.
                         self?.thumbnailCache[window.id] = image
-                        // If this window's preview is already showing (e.g. "P"
-                        // was pressed before its snapshot finished), re-fit now.
+                        // If this window's preview was requested (e.g. "P" was
+                        // pressed before its snapshot finished), show it now.
                         if self?.previewWindowID == window.id {
-                            self?.resizePanelKeepingLeftEdge()
+                            self?.updatePreviewCard()
                         }
                     }
                 }
@@ -544,10 +645,9 @@ final class SwitcherController: ObservableObject {
         }
     }
 
-    /// Re-fits the panel when the preview or filter bar appears/disappears
-    /// without moving the existing list: the panel's top-left corner stays pinned
-    /// so the list stays anchored while the preview pane opens out to the right
-    /// (and, if it's taller than the list, downward). Animated so it eases open
+    /// Re-fits the panel when the filter bar appears or the filtered list
+    /// changes, without moving the existing list: the panel's top-left corner
+    /// stays pinned so only the bottom edge moves. Animated so it eases open
     /// rather than the whole HUD jumping.
     private func resizePanelKeepingLeftEdge() {
         guard let panel else { return }
@@ -557,22 +657,14 @@ final class SwitcherController: ObservableObject {
             let size = contentView.fittingSize
 
             // AppKit frames are bottom-left based; pin the top-left corner so the
-            // list stays anchored and only the right edge (and, if needed, the
-            // bottom) moves.
+            // list stays anchored and only the bottom edge moves.
             let current = panel.frame
-            var newFrame = NSRect(
+            let newFrame = NSRect(
                 x: current.minX,
                 y: current.maxY - size.height,
                 width: size.width,
                 height: size.height
             )
-
-            // A large preview can be wider than the list, so growing rightwards
-            // may run past the display; slide the panel back on screen in that
-            // case rather than letting the preview be clipped.
-            if let visible = (panel.screen ?? NSScreen.main)?.visibleFrame, newFrame.maxX > visible.maxX {
-                newFrame.origin.x = max(visible.maxX - newFrame.width, visible.minX)
-            }
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.15
                 context.timingFunction = CAMediaTimingFunction(name: .easeOut)

@@ -79,3 +79,94 @@ struct PreviewSizeTests {
         #expect(Double(size.height) == SettingsKey.basePreviewHeight)
     }
 }
+
+/// Covers `previewCardLayout`, which places the floating preview card beside
+/// the HUD: which side it takes, how the snapshot is fitted, and keeping both
+/// the card and its notch where they belong.
+@Suite("Preview card layout")
+struct PreviewCardLayoutTests {
+    private let visible = CGRect(x: 0, y: 0, width: 1440, height: 900)
+    private let maxImage = CGSize(width: 320, height: 200)
+    /// A HUD centered on the screen.
+    private let centeredHUD = CGRect(x: 520, y: 250, width: 400, height: 400)
+
+    private func layout(
+        image: CGSize = CGSize(width: 1600, height: 1000),
+        hud: CGRect? = nil,
+        anchorY: CGFloat = 450,
+        maxImage: CGSize? = nil
+    ) -> PreviewCardLayout {
+        previewCardLayout(
+            imageSize: image,
+            maxImageSize: maxImage ?? self.maxImage,
+            hudFrame: hud ?? centeredHUD,
+            anchorY: anchorY,
+            visibleFrame: visible
+        )
+    }
+
+    @Test func aCenteredHUDGetsTheCardOnTheRightWithTheNotchFacingIt() {
+        let card = layout()
+
+        #expect(card.notchEdge == .leading)
+        #expect(card.frame.minX == centeredHUD.maxX + PreviewCardMetrics.gap)
+    }
+
+    @Test func aHUDNearTheRightEdgeGetsTheCardOnTheLeft() {
+        let hud = CGRect(x: 1000, y: 250, width: 400, height: 400)
+        let card = layout(hud: hud)
+
+        #expect(card.notchEdge == .trailing)
+        #expect(card.frame.maxX == hud.minX - PreviewCardMetrics.gap)
+    }
+
+    @Test func theCardNeverOverlapsTheHUDWhenThereIsRoom() {
+        let card = layout()
+
+        #expect(!card.frame.intersects(centeredHUD))
+    }
+
+    /// The snapshot keeps the window's shape instead of being letterboxed into
+    /// the fixed Size box.
+    @Test func theSnapshotKeepsTheWindowsAspectRatio() {
+        let tall = layout(image: CGSize(width: 800, height: 1200))
+
+        #expect(tall.imageSize.height == maxImage.height)
+        #expect(abs(tall.imageSize.width / tall.imageSize.height - 800.0 / 1200.0) < 0.01)
+    }
+
+    @Test func theSnapshotShrinksToFitTheRoomBesideTheHUD() {
+        // A wide HUD leaves only ~200pt on either side, less than the 640pt box
+        let hud = CGRect(x: 200, y: 250, width: 1040, height: 400)
+        let card = layout(hud: hud, maxImage: CGSize(width: 640, height: 400))
+
+        #expect(card.frame.minX >= hud.maxX)
+        #expect(card.frame.maxX <= visible.maxX)
+    }
+
+    @Test func theCardIsCenteredOnTheSelectedRow() {
+        let card = layout(anchorY: 500)
+
+        #expect(abs(card.frame.midY - 500) <= 1)
+        #expect(abs(card.notchY - card.frame.height / 2) <= 1)
+    }
+
+    /// A row near the bottom of a tall HUD would push the card off screen;
+    /// the card is clamped, but the notch still points at the row.
+    @Test func theCardStaysOnScreenButTheNotchFollowsTheRow() {
+        let hud = CGRect(x: 520, y: 20, width: 400, height: 860)
+        let card = layout(hud: hud, anchorY: 60)
+
+        #expect(card.frame.minY >= visible.minY)
+        #expect(abs((card.frame.maxY - card.notchY) - 60) <= 1)
+    }
+
+    @Test func theNotchStaysClearOfTheCardsCorners() {
+        let hud = CGRect(x: 520, y: 20, width: 400, height: 860)
+        let card = layout(hud: hud, anchorY: 21)
+        let inset = PreviewCardMetrics.cornerRadius + PreviewCardMetrics.notchWidth / 2
+
+        #expect(card.notchY >= inset)
+        #expect(card.notchY <= card.frame.height - inset)
+    }
+}

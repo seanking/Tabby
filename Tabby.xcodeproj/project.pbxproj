@@ -14,6 +14,7 @@
 		157E50D000F9F7CFD4B8085F /* SwitcherPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEBBDB56A288DA6BD91D016 /* SwitcherPanel.swift */; };
 		1C3D8519D748BFFE1470CDDC /* SwitcherController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8FB20CFA1818E69C7DF302F /* SwitcherController.swift */; };
 		2585C9B340424C2CB3AA61DC /* WindowInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27BE6A2FDC38B53A649728C /* WindowInfo.swift */; };
+		3C2D586D30715EDC0095FF4A /* PreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C2D586C30715EDC0095FF4A /* PreviewCard.swift */; };
 		3CB72F1730619EE200A20A40 /* PointerMovementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB72F1630619EE200A20A40 /* PointerMovementTests.swift */; };
 		3CB72F193061AE7100A20A40 /* PreviewSizeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB72F183061AE7100A20A40 /* PreviewSizeTests.swift */; };
 		3CB72F1B30697AAD00A20A40 /* SkyLightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB72F1A30697AAD00A20A40 /* SkyLightTests.swift */; };
@@ -47,6 +48,7 @@
 		26D8334D21A2610249CFF337 /* NavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationTests.swift; sourceTree = "<group>"; };
 		27D063DBA009E9FAF61AF1ED /* BadgeCountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgeCountTests.swift; sourceTree = "<group>"; };
 		31E476BA2057C11FA051F261 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3C2D586C30715EDC0095FF4A /* PreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewCard.swift; sourceTree = "<group>"; };
 		3CB72F1630619EE200A20A40 /* PointerMovementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerMovementTests.swift; sourceTree = "<group>"; };
 		3CB72F183061AE7100A20A40 /* PreviewSizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewSizeTests.swift; sourceTree = "<group>"; };
 		3CB72F1A30697AAD00A20A40 /* SkyLightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkyLightTests.swift; sourceTree = "<group>"; };
@@ -97,6 +99,7 @@
 				031C6A863D2ACC71E47DB53D /* TabbyApp.swift */,
 				D27BE6A2FDC38B53A649728C /* WindowInfo.swift */,
 				AFC33BC2C5CE8786D6FEB74F /* WindowManager.swift */,
+				3C2D586C30715EDC0095FF4A /* PreviewCard.swift */,
 			);
 			path = Tabby;
 			sourceTree = "<group>";
@@ -243,6 +246,7 @@
 				1C3D8519D748BFFE1470CDDC /* SwitcherController.swift in Sources */,
 				157E50D000F9F7CFD4B8085F /* SwitcherPanel.swift in Sources */,
 				A4AB95481818B3165A9D77D0 /* SwitcherView.swift in Sources */,
+				3C2D586D30715EDC0095FF4A /* PreviewCard.swift in Sources */,
 				A83C26482B1E9984F114F5AE /* TabbyApp.swift in Sources */,
 				2585C9B340424C2CB3AA61DC /* WindowInfo.swift in Sources */,
 				9BFBE7C535F3125811085968 /* WindowManager.swift in Sources */,
