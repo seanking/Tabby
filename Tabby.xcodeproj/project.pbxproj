@@ -381,6 +381,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.seanking.Tabby.dev;
+				PRODUCT_MODULE_NAME = Tabby;
 				PRODUCT_NAME = "Tabby-Dev";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
@@ -467,7 +468,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.seanking.TabbyTests;
 				SDKROOT = macosx;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Tabby.app/Contents/MacOS/Tabby";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Tabby-Dev.app/Contents/MacOS/Tabby-Dev";
 			};
 			name = Debug;
 		};
