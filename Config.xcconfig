@@ -1,0 +1,8 @@
+// Shared build settings that are safe to commit.
+//
+// DEVELOPMENT_TEAM is account-specific, so it isn't set here. Copy
+// Config.local.xcconfig.example to Config.local.xcconfig (gitignored) and
+// fill in your own Apple Developer Team ID to build and sign locally.
+DEVELOPMENT_TEAM =
+
+#include? "Config.local.xcconfig"

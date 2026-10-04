@@ -7,3 +7,6 @@ xcuserdata/
 # Swift Package Manager
 .build/
 .swiftpm/
+
+# Account-specific signing config (copy Config.local.xcconfig.example)
+Config.local.xcconfig
