@@ -18,6 +18,7 @@ enum SettingsKey {
     static let appearanceMode = "appearanceMode"
     static let showMenuBarWindows = "showMenuBarWindows"
     static let alwaysShowFilter = "alwaysShowFilter"
+    static let switcherDisplay = "switcherDisplay"
 
     /// Whether the switcher's filter bar is always shown, rather than only after
     /// Cmd+F. Shared so the settings UI and the switcher agree when unset.
@@ -109,6 +110,40 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
         case .system: return nil
         case .light: return NSAppearance(named: .aqua)
         case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
+/// Which display the switcher HUD appears on. Stored by raw value in
+/// `UserDefaults` via `@AppStorage`, so the settings picker and
+/// `SwitcherController` agree on the current choice.
+enum SwitcherDisplay: String, CaseIterable, Identifiable {
+    /// The display under the pointer — wherever the user is working.
+    case active
+    /// The primary display (the one with the menu bar in Displays settings).
+    case primary
+
+    var id: String { rawValue }
+
+    /// Human-readable name for the settings picker.
+    var label: String {
+        switch self {
+        case .active: return "Active"
+        case .primary: return "Primary"
+        }
+    }
+
+    /// The screen to show the switcher on for this choice, falling back to the
+    /// key window's screen if no screen matches.
+    @MainActor
+    func screen() -> NSScreen? {
+        switch self {
+        case .active:
+            return NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
+        case .primary:
+            // The first screen is always the primary display (origin at 0,0);
+            // `NSScreen.main` is instead the screen with the key window.
+            return NSScreen.screens.first ?? NSScreen.main
         }
     }
 }
@@ -391,6 +426,7 @@ private struct GeneralSettingsPane: View {
     @AppStorage(SettingsKey.hapticFeedback) private var hapticFeedback = SettingsKey.defaultHapticFeedback
     @AppStorage(SettingsKey.showDockIcon) private var showDockIcon = SettingsKey.defaultShowDockIcon
     @AppStorage(SettingsKey.showMenuBarWindows) private var showMenuBarWindows = SettingsKey.defaultShowMenuBarWindows
+    @AppStorage(SettingsKey.switcherDisplay) private var switcherDisplay: SwitcherDisplay = .active
     @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
@@ -429,10 +465,16 @@ private struct GeneralSettingsPane: View {
                 LabeledContent("Show after") {
                     numericField(value: $activationDelay, range: 0...5, step: 0.1, unit: "seconds", formatter: Self.delayFormatter)
                 }
+
+                Picker("Show on", selection: $switcherDisplay) {
+                    ForEach(SwitcherDisplay.allCases) { display in
+                        Text(display.label).tag(display)
+                    }
+                }
             } header: {
                 Text("Switcher")
             } footer: {
-                Text("How long to hold ⌘ before the switcher appears. A quick ⌘Tab within this delay just switches to the previous window.")
+                Text("How long to hold ⌘ before the switcher appears. A quick ⌘Tab within this delay just switches to the previous window. The switcher appears on the display under the pointer, or always on the primary display.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

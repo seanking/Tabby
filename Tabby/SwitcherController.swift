@@ -99,6 +99,11 @@ final class SwitcherController: ObservableObject {
         UserDefaults.standard.object(forKey: SettingsKey.previewScale) as? Double ?? SettingsKey.defaultPreviewScale
     }
 
+    /// Which display the HUD appears on (Settings → Switcher → Show on).
+    private var switcherDisplay: SwitcherDisplay {
+        UserDefaults.standard.string(forKey: SettingsKey.switcherDisplay).flatMap(SwitcherDisplay.init(rawValue:)) ?? .active
+    }
+
     /// Whether to tick the trackpad as the selection moves (Settings → Feedback).
     private var hapticFeedbackEnabled: Bool {
         UserDefaults.standard.object(forKey: SettingsKey.hapticFeedback) as? Bool ?? SettingsKey.defaultHapticFeedback
@@ -691,8 +696,7 @@ final class SwitcherController: ObservableObject {
         let contentSize = contentView.fittingSize
         panel.setContentSize(contentSize)
 
-        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
-        guard let frame = screen?.visibleFrame else { return }
+        guard let frame = switcherDisplay.screen()?.visibleFrame else { return }
         let origin = NSPoint(
             x: frame.midX - contentSize.width / 2,
             y: frame.midY - contentSize.height / 2
