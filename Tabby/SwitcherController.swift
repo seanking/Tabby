@@ -41,6 +41,13 @@ final class SwitcherController: ObservableObject {
     /// filtering narrows the visible rows.
     @Published private(set) var allWindows: [WindowInfo] = []
 
+    /// Visible frame of the display the HUD is shown on, so the view caps its
+    /// height and name column to that display rather than `NSScreen.main` (the
+    /// key window's screen, which may be a different, larger display). Set
+    /// before each layout pass in `centerOnActiveScreen(_:)`; nil until the HUD
+    /// first appears.
+    @Published private(set) var screenFrame: CGRect?
+
     /// Last successful window snapshot per window id, kept across Cmd+Tab
     /// invocations. Lets hidden/minimized windows — which can't be captured live —
     /// show their most recent on-screen image instead of just an icon. Pruned to
@@ -691,12 +698,20 @@ final class SwitcherController: ObservableObject {
     }
 
     private func centerOnActiveScreen(_ panel: SwitcherPanel) {
-        guard let contentView = panel.contentViewController?.view else { return }
+        guard let contentView = panel.contentViewController?.view,
+              let frame = switcherDisplay.screen()?.visibleFrame
+        else { return }
+
+        // Pick the target display before measuring, so the view's size caps
+        // reflect the display the HUD is about to land on. The hosting view
+        // applies the published change synchronously on the layout pass below.
+        if screenFrame != frame {
+            screenFrame = frame
+        }
         contentView.layoutSubtreeIfNeeded()
         let contentSize = contentView.fittingSize
         panel.setContentSize(contentSize)
 
-        guard let frame = switcherDisplay.screen()?.visibleFrame else { return }
         let origin = NSPoint(
             x: frame.midX - contentSize.width / 2,
             y: frame.midY - contentSize.height / 2

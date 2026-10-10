@@ -228,8 +228,15 @@ struct SwitcherView: View {
         .allowsHitTesting(false)
     }
 
+    /// Visible frame of the display the HUD is shown on, which the size caps
+    /// below are measured against. Falls back to `NSScreen.main` before the
+    /// controller has placed the HUD on a display.
+    private var displayFrame: CGRect? {
+        controller.screenFrame ?? NSScreen.main?.visibleFrame
+    }
+
     private var maxColumnHeight: CGFloat {
-        let screenHeight = NSScreen.main?.visibleFrame.height ?? 900
+        let screenHeight = displayFrame?.height ?? 900
         // A row is as tall as the larger of the icon and the (possibly enlarged)
         // name text, so the panel reserves enough height for big font sizes.
         let rowHeight = max(iconSize, (fontSize * 1.35).rounded(.up)) + 8
@@ -257,7 +264,7 @@ struct SwitcherView: View {
             return max(widest, width)
         }
 
-        let screenWidth = NSScreen.main?.visibleFrame.width ?? 1200
+        let screenWidth = displayFrame?.width ?? 1200
         // +2 guards against sub-pixel rounding that would clip the last glyph.
         return min(max(widest.rounded(.up) + 2, 80), screenWidth * 0.5)
     }
