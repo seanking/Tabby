@@ -27,6 +27,9 @@ final class EventTapManager {
     var onFilterInput: ((_ text: String) -> Void)?
     /// Fired when Delete/Backspace is pressed while filtering.
     var onFilterBackspace: (() -> Void)?
+    /// Fired when Left/Right is pressed while filtering, to move the caret
+    /// one character back (`forward == false`) or forward.
+    var onFilterMoveCursor: ((_ forward: Bool) -> Void)?
 
     private(set) var isSwitcherActive = false
     /// Whether the filter field is active. Once true, releasing Cmd no longer
@@ -195,6 +198,7 @@ final class EventTapManager {
             case .filterActivate: onFilterActivate?()
             case .filterInput(let text): onFilterInput?(text)
             case .filterBackspace: onFilterBackspace?()
+            case .filterMoveCursor(let forward): onFilterMoveCursor?(forward)
             }
         }
     }
@@ -217,6 +221,7 @@ final class EventTapManager {
             case filterActivate
             case filterInput(String)
             case filterBackspace
+            case filterMoveCursor(forward: Bool)
         }
 
         var action: Action
@@ -253,10 +258,10 @@ final class EventTapManager {
     ///   advance/retreat, "P" toggles the preview, and Cmd+H/Q/M act on the
     ///   selected window — all swallowed. Everything else passes through.
     /// - Cmd+F opens the filter. Once filtering, printable keys build the query,
-    ///   Delete removes a character, the up/down arrows still navigate, and every
-    ///   key is swallowed so nothing leaks to the app behind the HUD. The "P"
-    ///   preview shortcut and the left/right arrows step aside so those letters
-    ///   can be typed instead.
+    ///   Delete removes the character before the caret, the left/right arrows
+    ///   move the caret, the up/down arrows still navigate, and every key is
+    ///   swallowed so nothing leaks to the app behind the HUD. The "P" preview
+    ///   shortcut steps aside so that letter can be typed instead.
     /// - Pressing any arrow key latches the HUD open (`isLatched`) so releasing
     ///   Cmd no longer commits; Cmd+Tab deliberately does not, preserving the
     ///   classic hold-and-release quick switch. Other in-switcher keys carry the
@@ -317,8 +322,21 @@ final class EventTapManager {
             break
         }
 
-        // Left/right arrows and the "P" preview toggle only apply outside the
-        // filter, where their letters aren't wanted as query text.
+        // While filtering, left/right move the caret within the query, like in
+        // a text field, instead of changing the selection.
+        if isFiltering {
+            switch keyCode {
+            case kVK_RightArrow:
+                return KeyDecision(action: .filterMoveCursor(forward: true), swallow: true, isSwitcherActive: true, isFiltering: true, isLatched: isLatched)
+            case kVK_LeftArrow:
+                return KeyDecision(action: .filterMoveCursor(forward: false), swallow: true, isSwitcherActive: true, isFiltering: true, isLatched: isLatched)
+            default:
+                break
+            }
+        }
+
+        // Left/right arrows and the "P" preview toggle only navigate outside the
+        // filter, where they aren't needed for editing the query.
         if !isFiltering {
             switch keyCode {
             case kVK_RightArrow:
@@ -362,8 +380,11 @@ final class EventTapManager {
 
     /// Whether a resolved key string is ordinary text to append to the filter
     /// (letters, digits, space, punctuation) rather than a control character.
+    /// AppKit reports arrows, F-keys, Home/End, etc. as Private Use Area code
+    /// points (`NSUpArrowFunctionKey` = U+F700 … U+F8FF); those aren't text.
     private static func isPrintable(_ text: String) -> Bool {
         guard let scalar = text.unicodeScalars.first else { return false }
+        if (0xF700...0xF8FF).contains(scalar.value) { return false }
         return scalar.value >= 0x20 && scalar.value != 0x7F
     }
 

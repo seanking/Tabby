@@ -458,10 +458,13 @@ struct SwitcherFilterBar: View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            Text(controller.filterText.isEmpty ? placeholder : controller.filterText)
-                .foregroundStyle(controller.filterText.isEmpty ? Color.secondary : Color.black)
-                .lineLimit(1)
-                .truncationMode(.head)
+            if controller.filterActive {
+                query
+            } else {
+                Text(placeholder)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 0)
             if !controller.filterText.isEmpty {
                 Button {
@@ -498,6 +501,34 @@ struct SwitcherFilterBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.top, 12)
+    }
+
+    /// The query split at the caret, with the caret drawn between the halves
+    /// (or before the placeholder when empty). The text before the caret wins
+    /// any space squeeze and truncates at its head, so the caret stays visible.
+    private var query: some View {
+        let text = controller.filterText
+        let split = text.index(text.startIndex, offsetBy: min(controller.filterCursor, text.count))
+        return HStack(spacing: 0) {
+            Text(text[..<split])
+                .foregroundStyle(Color.black)
+                .lineLimit(1)
+                .truncationMode(.head)
+                .layoutPriority(1)
+            Rectangle()
+                .fill(Color.accentColor)
+                .frame(width: 1.5, height: 15)
+            if text.isEmpty {
+                Text(placeholder)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            } else {
+                Text(text[split...])
+                    .foregroundStyle(Color.black)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
     }
 
     /// Placeholder for an empty query. Typing only reaches the filter after a

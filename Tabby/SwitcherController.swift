@@ -27,6 +27,9 @@ final class SwitcherController: ObservableObject {
     @Published private(set) var filterActive = false
     /// The current filter query typed by the user.
     @Published private(set) var filterText = ""
+    /// The caret's position in `filterText`, as a character offset (0 is
+    /// before the first character, `filterText.count` is after the last).
+    @Published private(set) var filterCursor = 0
 
     /// Whether the next `selectedIndex` change should scroll the selected row
     /// into view. Suppressed for pointer hover so a long list doesn't scroll out
@@ -140,8 +143,9 @@ final class SwitcherController: ObservableObject {
         eventTap.onTogglePreview = { [weak self] in self?.togglePreview() }
         eventTap.onOpenSettings = { [weak self] in self?.openSettings() }
         eventTap.onFilterActivate = { [weak self] in self?.activateFilter() }
-        eventTap.onFilterInput = { [weak self] text in self?.appendFilter(text) }
+        eventTap.onFilterInput = { [weak self] text in self?.insertFilterText(text) }
         eventTap.onFilterBackspace = { [weak self] in self?.deleteFilterCharacter() }
+        eventTap.onFilterMoveCursor = { [weak self] forward in self?.moveFilterCursor(forward: forward) }
         eventTap.start()
     }
 
@@ -156,6 +160,7 @@ final class SwitcherController: ObservableObject {
         allWindows = list
         filterActive = false
         filterText = ""
+        filterCursor = 0
         windows = list
         icons = Dictionary(uniqueKeysWithValues: Set(list.map(\.pid)).compactMap { pid in
             windowManager.icon(for: pid).map { (pid, $0) }
@@ -366,18 +371,31 @@ final class SwitcherController: ObservableObject {
         activateFilter()
     }
 
-    /// Appends typed text to the filter query and re-applies it.
-    private func appendFilter(_ text: String) {
+    /// Inserts typed text into the filter query at the caret, advances the
+    /// caret past it, and re-applies the filter.
+    private func insertFilterText(_ text: String) {
         guard filterActive else { return }
-        filterText += text
+        let index = filterText.index(filterText.startIndex, offsetBy: filterCursor)
+        filterText.insert(contentsOf: text, at: index)
+        filterCursor += text.count
         applyFilter()
     }
 
-    /// Removes the last character from the filter query (Delete/Backspace).
+    /// Removes the character before the caret (Delete/Backspace). No-op with
+    /// the caret at the start of the query.
     private func deleteFilterCharacter() {
-        guard filterActive, !filterText.isEmpty else { return }
-        filterText.removeLast()
+        guard filterActive, filterCursor > 0 else { return }
+        let index = filterText.index(filterText.startIndex, offsetBy: filterCursor - 1)
+        filterText.remove(at: index)
+        filterCursor -= 1
         applyFilter()
+    }
+
+    /// Moves the caret one character left or right, stopping at either end.
+    /// Only the caret changes, so the list isn't re-filtered.
+    private func moveFilterCursor(forward: Bool) {
+        guard filterActive else { return }
+        filterCursor = min(max(filterCursor + (forward ? 1 : -1), 0), filterText.count)
     }
 
     /// Empties the filter query (the filter bar's clear button) and restores the
@@ -385,6 +403,7 @@ final class SwitcherController: ObservableObject {
     func clearFilter() {
         guard !filterText.isEmpty else { return }
         filterText = ""
+        filterCursor = 0
         applyFilter()
     }
 
@@ -586,6 +605,7 @@ final class SwitcherController: ObservableObject {
         selectedRowFrame = nil
         filterActive = false
         filterText = ""
+        filterCursor = 0
         allWindows = []
         isPanelPresented = false
         pointerGate.reset()

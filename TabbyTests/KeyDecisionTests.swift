@@ -217,6 +217,22 @@ struct KeyDecisionTests {
         #expect(up == Decision(action: .advance(reverse: true), swallow: true, isSwitcherActive: true, isFiltering: true, isLatched: true))
     }
 
+    @Test func leftAndRightMoveTheCaretWhileFiltering() {
+        // NSEvent reports arrows as Private Use Area characters (U+F702/U+F703);
+        // they must move the caret, never be typed into the query.
+        let left = decide(kVK_LeftArrow, active: true, filtering: true, characters: "\u{F702}")
+        #expect(left == Decision(action: .filterMoveCursor(forward: false), swallow: true, isSwitcherActive: true, isFiltering: true))
+        let right = decide(kVK_RightArrow, active: true, filtering: true, characters: "\u{F703}")
+        #expect(right == Decision(action: .filterMoveCursor(forward: true), swallow: true, isSwitcherActive: true, isFiltering: true))
+    }
+
+    @Test func functionKeyCharactersAreNotTypedWhileFiltering() {
+        // Forward Delete (U+F728), Home, Page Up, etc. arrive as Private Use
+        // Area characters too; they're swallowed without adding text.
+        let decision = decide(kVK_ForwardDelete, active: true, filtering: true, characters: "\u{F728}")
+        #expect(decision == Decision(action: .none, swallow: true, isSwitcherActive: true, isFiltering: true))
+    }
+
     @Test func returnSelectsWhileFiltering() {
         let decision = decide(kVK_Return, active: true, filtering: true)
         #expect(decision == Decision(action: .select, swallow: true, isSwitcherActive: false))
