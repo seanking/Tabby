@@ -100,12 +100,45 @@ struct DisplayNameTests {
 
     @Test func singleSegmentTitleIsUnchanged() {
         // Given
+        let window = window(owner: "Notes", title: "Groceries")
+
+        // When
+        let name = switcherDisplayName(for: window, showAppName: true)
+
+        // Then
+        #expect(name == "Notes — Groceries")
+    }
+
+    @Test func titleMatchingAppNameShowsAppOnly() {
+        // Given
         let window = window(owner: "Reminders", title: "Reminders")
 
         // When
         let name = switcherDisplayName(for: window, showAppName: true)
 
         // Then
-        #expect(name == "Reminders — Reminders")
+        #expect(name == "Reminders")
+    }
+
+    @Test func titleMatchingAppNameIgnoresCase() {
+        // Given
+        let window = window(owner: "Activity Monitor", title: "activity monitor")
+
+        // When
+        let name = switcherDisplayName(for: window, showAppName: true)
+
+        // Then
+        #expect(name == "Activity Monitor")
+    }
+
+    @Test func hidingAppNameStillShowsTitleMatchingAppName() {
+        // Given
+        let window = window(owner: "Reminders", title: "Reminders")
+
+        // When
+        let name = switcherDisplayName(for: window, showAppName: false)
+
+        // Then
+        #expect(name == "Reminders")
     }
 }

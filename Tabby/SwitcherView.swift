@@ -247,6 +247,12 @@ func switcherDisplayName(for window: WindowInfo, showAppName: Bool) -> String {
         return title.isEmpty ? app : title
     }
 
+    // A title that just repeats the app name (e.g. Reminders' "Reminders")
+    // adds nothing, so show the app name alone.
+    if title.caseInsensitiveCompare(app) == .orderedSame {
+        return app
+    }
+
     switch (app.isEmpty, title.isEmpty) {
     case (false, false): return "\(app) — \(title)"
     case (false, true): return app
