@@ -284,8 +284,12 @@ final class WindowManager: Sendable {
     /// ScreenCaptureKit (the modern replacement for the deprecated
     /// `CGWindowListCreateImage`). Requires Screen Recording access and macOS 14+;
     /// returns nil (so the UI falls back to the app icon) without it or if the
-    /// window can't be captured (e.g. it's minimized/off-screen).
-    func thumbnail(for window: WindowInfo) async -> NSImage? {
+    /// window can't be captured (e.g. it's minimized/off-screen). Pass `maxSize`
+    /// (points) to capture only as many pixels as a box that size needs — the
+    /// thumbnails strip shows many small snapshots at once, so full-size
+    /// captures would be slow and memory-hungry. The image's point size stays
+    /// the window's own, so its aspect ratio is unaffected either way.
+    func thumbnail(for window: WindowInfo, maxSize: CGSize? = nil) async -> NSImage? {
         guard #available(macOS 14.0, *) else { return nil }
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(
@@ -300,9 +304,15 @@ final class WindowManager: Sendable {
             let config = SCStreamConfiguration()
             // Capture at 2x the window's point size for a crisp preview on
             // Retina displays, while keeping the image a reasonable size.
-            let scale = 2
-            config.width = max(Int(scWindow.frame.width) * scale, 1)
-            config.height = max(Int(scWindow.frame.height) * scale, 1)
+            let scale = 2.0
+            var captureSize = scWindow.frame.size
+            if let maxSize, captureSize.width > 0, captureSize.height > 0 {
+                // Shrink to fit the box (never enlarge), keeping the aspect ratio.
+                let fit = min(maxSize.width / captureSize.width, maxSize.height / captureSize.height, 1)
+                captureSize = CGSize(width: captureSize.width * fit, height: captureSize.height * fit)
+            }
+            config.width = max(Int(captureSize.width * scale), 1)
+            config.height = max(Int(captureSize.height * scale), 1)
             config.showsCursor = false
             config.ignoreShadowsSingleWindow = true
 

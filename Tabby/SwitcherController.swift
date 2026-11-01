@@ -111,6 +111,18 @@ final class SwitcherController: ObservableObject {
         UserDefaults.standard.string(forKey: SettingsKey.switcherDisplay).flatMap(SwitcherDisplay.init(rawValue:)) ?? .active
     }
 
+    /// How the HUD lays out the windows (Settings → Appearance → Style). The
+    /// thumbnails strip already shows every window's snapshot, so the floating
+    /// preview card is only used with the list.
+    private var switcherStyle: SwitcherStyle {
+        UserDefaults.standard.string(forKey: SettingsKey.switcherStyle).flatMap(SwitcherStyle.init(rawValue:)) ?? .list
+    }
+
+    /// The Appearance "Size" scale, used to size thumbnail captures to the tiles.
+    private var uiScale: Double {
+        UserDefaults.standard.object(forKey: SettingsKey.uiScale) as? Double ?? SettingsKey.defaultScale
+    }
+
     /// Whether to tick the trackpad as the selection moves (Settings → Feedback).
     private var hapticFeedbackEnabled: Bool {
         UserDefaults.standard.object(forKey: SettingsKey.hapticFeedback) as? Bool ?? SettingsKey.defaultHapticFeedback
@@ -226,7 +238,7 @@ final class SwitcherController: ObservableObject {
             previewWindowID = nil
             updatePreviewCard()
         }
-        guard isPanelPresented, previewEnabled else { return }
+        guard isPanelPresented, previewEnabled, switcherStyle == .list else { return }
         dwellTask = Task { [weak self, dwell = previewDwell] in
             try? await Task.sleep(for: .seconds(dwell))
             guard !Task.isCancelled else { return }
@@ -244,7 +256,7 @@ final class SwitcherController: ObservableObject {
     /// dwell) or hides it if already showing. Works regardless of the automatic
     /// preview setting — that setting only governs the dwell, not this hotkey.
     private func togglePreview() {
-        guard isPanelPresented else { return }
+        guard isPanelPresented, switcherStyle == .list else { return }
         dwellTask?.cancel()
         if previewWindowID != nil {
             previewWindowID = nil
@@ -619,19 +631,38 @@ final class SwitcherController: ObservableObject {
         thumbnailTask?.cancel()
         let snapshot = windows
         let manager = windowManager
+        // The strip only needs tile-sized snapshots; the list's preview card
+        // can grow large, so it keeps full-size captures.
+        let maxSize: CGSize? = switcherStyle == .thumbnails
+            ? switcherTileSize(scale: uiScale, screenSize: (screenFrame ?? NSScreen.main?.visibleFrame ?? .zero).size)
+            : nil
         thumbnailTask = Task.detached(priority: .userInitiated) {
-            for window in snapshot {
-                if Task.isCancelled { return }
-                if let image = await manager.thumbnail(for: window) {
+            await withTaskGroup(of: (CGWindowID, NSImage?).self) { group in
+                // Keep a few captures in flight at once so a strip full of
+                // tiles fills in quickly, without flooding ScreenCaptureKit.
+                var pending = snapshot.makeIterator()
+                func enqueueNext() {
+                    guard let window = pending.next() else { return }
+                    group.addTask { (window.id, await manager.thumbnail(for: window, maxSize: maxSize)) }
+                }
+                for _ in 0..<4 { enqueueNext() }
+
+                while let (id, image) = await group.next() {
+                    if Task.isCancelled {
+                        group.cancelAll()
+                        return
+                    }
+                    enqueueNext()
+                    guard let image else { continue }
                     await MainActor.run { [weak self] in
-                        self?.thumbnails[window.id] = image
+                        self?.thumbnails[id] = image
                         // Remember this snapshot so the window can still show a
                         // preview later when it's hidden/minimized and can't be
                         // captured live.
-                        self?.thumbnailCache[window.id] = image
+                        self?.thumbnailCache[id] = image
                         // If this window's preview was requested (e.g. "P" was
                         // pressed before its snapshot finished), show it now.
-                        if self?.previewWindowID == window.id {
+                        if self?.previewWindowID == id {
                             self?.updatePreviewCard()
                         }
                     }
@@ -692,7 +723,7 @@ final class SwitcherController: ObservableObject {
 
     private func makePanel() -> SwitcherPanel {
         let panel = SwitcherPanel()
-        let hosting = NSHostingController(rootView: SwitcherView(controller: self))
+        let hosting = NSHostingController(rootView: SwitcherRootView(controller: self))
         panel.contentViewController = hosting
         return panel
     }

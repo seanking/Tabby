@@ -1,5 +1,21 @@
 import SwiftUI
 
+/// The HUD panel's root: shows the list or the thumbnails strip per the
+/// Appearance "Style" setting. Reading the setting here (rather than when the
+/// panel is built) lets the style change between sessions without rebuilding
+/// the panel.
+struct SwitcherRootView: View {
+    @ObservedObject var controller: SwitcherController
+    @AppStorage(SettingsKey.switcherStyle) private var style: SwitcherStyle = .list
+
+    var body: some View {
+        switch style {
+        case .list: SwitcherView(controller: controller)
+        case .thumbnails: ThumbnailSwitcherView(controller: controller)
+        }
+    }
+}
+
 struct SwitcherView: View {
     @ObservedObject var controller: SwitcherController
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
@@ -26,19 +42,7 @@ struct SwitcherView: View {
         // beside the HUD (see `PreviewCardView`), so the switcher never changes
         // shape when it appears.
         listColumn
-        .background(
-            VisualEffectBackground(
-                material: .underWindowBackground,
-                blendingMode: .behindWindow,
-                cornerRadius: 20
-            )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .fixedSize()
+            .switcherHUDChrome()
     }
 
     /// The window list itself: the filter field (always, or only while active,
@@ -46,7 +50,7 @@ struct SwitcherView: View {
     private var listColumn: some View {
         VStack(spacing: 0) {
             if alwaysShowFilter || controller.filterActive {
-                filterBar
+                SwitcherFilterBar(controller: controller, width: rowContentWidth)
             }
             ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
@@ -138,65 +142,6 @@ struct SwitcherView: View {
         }
     }
 
-    /// The filter field pinned above the list. Input is fed in through the event
-    /// tap once Cmd+F starts filtering (the panel can't take key focus), so this
-    /// only mirrors the current query rather than being an editable field. The
-    /// trailing X clears the query while keeping the filter active.
-    private var filterBar: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            Text(controller.filterText.isEmpty ? filterPlaceholder : controller.filterText)
-                .foregroundStyle(controller.filterText.isEmpty ? Color.secondary : Color.black)
-                .lineLimit(1)
-                .truncationMode(.head)
-            Spacer(minLength: 0)
-            if !controller.filterText.isEmpty {
-                Button {
-                    controller.clearFilter()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Clear filter")
-            }
-        }
-        .font(.body)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        // Match the rows' content width so the field aligns with them and a long
-        // query truncates instead of widening the HUD.
-        .frame(width: rowContentWidth, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.primary.opacity(0.08))
-        )
-        // Accent focus ring while filtering, like a focused macOS text field, so
-        // it's obvious that typing now goes into the filter.
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.accentColor, lineWidth: 2)
-                .opacity(controller.filterActive ? 1 : 0)
-        )
-        .animation(.easeOut(duration: 0.15), value: controller.filterActive)
-        // Clicking anywhere in the bar (other than the clear button) starts
-        // filtering, as Cmd+F does.
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onTapGesture {
-            controller.beginFilterFromClick()
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 12)
-    }
-
-    /// Placeholder for an empty query. Typing only reaches the filter after a
-    /// click or Cmd+F, so the always-visible bar hints at both until then, and
-    /// prompts for input once the filter has focus.
-    private var filterPlaceholder: String {
-        controller.filterActive ? "Type to filter…" : "Click or ⌘F to filter"
-    }
-
     /// Whether rows extend above the visible area (something scrolled off the top):
     /// the content's top edge sits above the viewport's top (y = 0).
     private var canScrollUp: Bool {
@@ -286,8 +231,9 @@ func switcherPreviewSize(scale: Double, screenSize: CGSize) -> CGSize {
 }
 
 /// Builds a window's row label: "AppName — Window Title", reducing multi-segment
-/// titles (e.g. Safari's "Profile — Page") to their last em-dash segment and
-/// respecting the "Show app name" setting. Shared so the layout can measure the
+/// titles (e.g. Safari's "Profile — Page") to their last em-dash segment,
+/// dropping a title that merely repeats the app name, and respecting the
+/// "Show app name" setting. Shared so the layout can measure the
 /// same string the row renders.
 func switcherDisplayName(for window: WindowInfo, showAppName: Bool) -> String {
     let app = window.ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -320,12 +266,6 @@ private struct WindowRow: View {
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
-    @AppStorage(SettingsKey.iconReaction) private var iconReaction: IconReaction = .none
-
-    /// Bumped each time this row becomes the selection, driving the icon's
-    /// reaction animation. A counter rather than a Bool so re-selecting the same
-    /// row replays the animation and deselection never triggers one.
-    @State private var reactionTrigger = 0
 
     /// Name-label and badge point sizes derived from the single "Size" scale, so
     /// one control grows the text, icons, and badges together.
@@ -373,21 +313,7 @@ private struct WindowRow: View {
             }
             // Whimsy: play the chosen reaction on the icon (and its badge) each
             // time this row becomes the selection.
-            .keyframeAnimator(initialValue: IconReactionValues(), trigger: reactionTrigger) { view, value in
-                view
-                    .scaleEffect(x: value.scaleX, y: value.scaleY, anchor: .bottom)
-                    .rotationEffect(.degrees(value.rotation))
-                    .offset(y: value.offsetY)
-            } keyframes: { _ in
-                reactionKeyframes(for: iconReaction)
-            }
-            .onChange(of: isSelected) { _, selected in
-                if selected { fireReaction() }
-            }
-            .onAppear {
-                // The initially selected row reacts as the switcher opens.
-                if isSelected { fireReaction() }
-            }
+            .iconReaction(isSelected: isSelected)
 
             Text(displayName)
                 .font(.system(size: fontSize))
@@ -406,6 +332,46 @@ private struct WindowRow: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1.5)
         )
+    }
+}
+
+extension View {
+    /// Plays the Appearance "Icon reaction" animation on an app icon (and its
+    /// badge) each time its window becomes the selection, including the window
+    /// selected as the switcher opens. Shared by the list's rows and the
+    /// thumbnails' tiles.
+    func iconReaction(isSelected: Bool) -> some View {
+        modifier(IconReactionModifier(isSelected: isSelected))
+    }
+}
+
+private struct IconReactionModifier: ViewModifier {
+    let isSelected: Bool
+
+    @AppStorage(SettingsKey.iconReaction) private var iconReaction: IconReaction = .none
+
+    /// Bumped each time this icon's window becomes the selection, driving the
+    /// reaction animation. A counter rather than a Bool so re-selecting the same
+    /// window replays the animation and deselection never triggers one.
+    @State private var reactionTrigger = 0
+
+    func body(content: Content) -> some View {
+        content
+            .keyframeAnimator(initialValue: IconReactionValues(), trigger: reactionTrigger) { view, value in
+                view
+                    .scaleEffect(x: value.scaleX, y: value.scaleY, anchor: .bottom)
+                    .rotationEffect(.degrees(value.rotation))
+                    .offset(y: value.offsetY)
+            } keyframes: { _ in
+                reactionKeyframes(for: iconReaction)
+            }
+            .onChange(of: isSelected) { _, selected in
+                if selected { fireReaction() }
+            }
+            .onAppear {
+                // The initially selected window reacts as the switcher opens.
+                if isSelected { fireReaction() }
+            }
     }
 
     /// Replays the icon reaction, unless the user has turned reactions off.
@@ -469,6 +435,91 @@ private struct IconReactionValues {
     var scaleY: CGFloat = 1
     var rotation: Double = 0
     var offsetY: CGFloat = 0
+}
+
+/// The filter field pinned above the windows, shared by both switcher styles.
+/// Input is fed in through the event tap once Cmd+F starts filtering (the panel
+/// can't take key focus), so this only mirrors the current query rather than
+/// being an editable field. The trailing X clears the query while keeping the
+/// filter active.
+struct SwitcherFilterBar: View {
+    @ObservedObject var controller: SwitcherController
+    /// The field's width, matched to the content below it so a long query
+    /// truncates instead of widening the HUD.
+    let width: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            Text(controller.filterText.isEmpty ? placeholder : controller.filterText)
+                .foregroundStyle(controller.filterText.isEmpty ? Color.secondary : Color.black)
+                .lineLimit(1)
+                .truncationMode(.head)
+            Spacer(minLength: 0)
+            if !controller.filterText.isEmpty {
+                Button {
+                    controller.clearFilter()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear filter")
+            }
+        }
+        .font(.body)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(width: width, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.primary.opacity(0.08))
+        )
+        // Accent focus ring while filtering, like a focused macOS text field, so
+        // it's obvious that typing now goes into the filter.
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.accentColor, lineWidth: 2)
+                .opacity(controller.filterActive ? 1 : 0)
+        )
+        .animation(.easeOut(duration: 0.15), value: controller.filterActive)
+        // Clicking anywhere in the bar (other than the clear button) starts
+        // filtering, as Cmd+F does.
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onTapGesture {
+            controller.beginFilterFromClick()
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+    }
+
+    /// Placeholder for an empty query. Typing only reaches the filter after a
+    /// click or Cmd+F, so the always-visible bar hints at both until then, and
+    /// prompts for input once the filter has focus.
+    private var placeholder: String {
+        controller.filterActive ? "Type to filter…" : "Click or ⌘F to filter"
+    }
+}
+
+extension View {
+    /// The HUD's rounded, translucent backdrop and hairline border, shared by
+    /// both switcher styles. Fixed-size so the panel fits its content exactly.
+    func switcherHUDChrome() -> some View {
+        background(
+            VisualEffectBackground(
+                material: .underWindowBackground,
+                blendingMode: .behindWindow,
+                cornerRadius: 20
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .fixedSize()
+    }
 }
 
 /// A transparent, Dock-like backdrop. Uses `NSVisualEffectView` with

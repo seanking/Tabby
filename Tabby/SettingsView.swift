@@ -19,6 +19,7 @@ enum SettingsKey {
     static let showMenuBarWindows = "showMenuBarWindows"
     static let alwaysShowFilter = "alwaysShowFilter"
     static let switcherDisplay = "switcherDisplay"
+    static let switcherStyle = "switcherStyle"
 
     /// Whether the switcher's filter bar is always shown, rather than only after
     /// Cmd+F. Shared so the settings UI and the switcher agree when unset.
@@ -83,6 +84,35 @@ enum SettingsKey {
     /// 16:10, so a typical window snapshot nearly fills it.
     static let basePreviewWidth = 320.0
     static let basePreviewHeight = 200.0
+
+    /// Baseline box (points) each window's snapshot is fitted into in the
+    /// thumbnails switcher style at 100% scale. Grows with the "Size" control.
+    static let baseTileWidth = 200.0
+    static let baseTileHeight = 125.0
+
+    /// Baseline side length (points) of the app icon pinned to a thumbnail's
+    /// lower corner at 100% scale.
+    static let baseTileIconSize = 36.0
+}
+
+/// How the switcher HUD lays out the windows. Stored by raw value in
+/// `UserDefaults` via `@AppStorage`, so the settings picker, the HUD's root
+/// view, and `SwitcherController` agree on the current choice.
+enum SwitcherStyle: String, CaseIterable, Identifiable {
+    /// A vertical list of rows (icon + name), with an optional preview card.
+    case list
+    /// A horizontal strip of window snapshots with the name underneath.
+    case thumbnails
+
+    var id: String { rawValue }
+
+    /// Human-readable name for the settings picker.
+    var label: String {
+        switch self {
+        case .list: return "List"
+        case .thumbnails: return "Thumbnails"
+        }
+    }
 }
 
 /// Whether Tabby follows the system's light/dark setting or forces one. Stored
@@ -509,6 +539,7 @@ private struct GeneralSettingsPane: View {
 /// whether to show the preview and how long to dwell.
 private struct PreviewSettingsPane: View {
     @AppStorage(SettingsKey.appearanceMode) private var appearanceMode: AppearanceMode = .system
+    @AppStorage(SettingsKey.switcherStyle) private var switcherStyle: SwitcherStyle = .list
     @AppStorage(SettingsKey.showAppName) private var showAppName = true
     @AppStorage(SettingsKey.showBadges) private var showBadges = true
     @AppStorage(SettingsKey.uiScale) private var scale = SettingsKey.defaultScale
@@ -530,6 +561,13 @@ private struct PreviewSettingsPane: View {
                 .onChange(of: appearanceMode) {
                     AppDelegate.applyAppearance()
                 }
+
+                Picker("Style", selection: $switcherStyle) {
+                    ForEach(SwitcherStyle.allCases) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
 
                 Toggle("Show app name", isOn: $showAppName)
                 Toggle("Show badges on icons", isOn: $showBadges)
@@ -553,40 +591,44 @@ private struct PreviewSettingsPane: View {
                 }
             }
 
-            Section {
-                Toggle("Show window preview", isOn: $showWindowPreview)
+            // The thumbnails grid is itself a set of previews, so the preview
+            // card (and its settings) only apply to the list style.
+            if switcherStyle == .list {
+                Section {
+                    Toggle("Show window preview", isOn: $showWindowPreview)
 
-                if showWindowPreview {
-                    LabeledContent("Show after") {
-                        HStack(spacing: 6) {
-                            TextField("", value: $previewDwell, formatter: Self.dwellFormatter)
-                                .textFieldStyle(.roundedBorder)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 60)
-                            Text("seconds")
-                                .foregroundStyle(.secondary)
+                    if showWindowPreview {
+                        LabeledContent("Show after") {
+                            HStack(spacing: 6) {
+                                TextField("", value: $previewDwell, formatter: Self.dwellFormatter)
+                                    .textFieldStyle(.roundedBorder)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 60)
+                                Text("seconds")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-                }
 
-                // Always available: the toggle only governs the automatic
-                // dwell preview, and pressing P shows the preview regardless.
-                LabeledContent("Size") {
-                    HStack(spacing: 8) {
-                        Slider(value: $previewScale, in: SettingsKey.previewScaleRange, step: 0.25)
-                            .frame(width: 140)
-                        Text(previewScale.formatted(.percent.precision(.fractionLength(0))))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                            .frame(width: 44, alignment: .trailing)
+                    // Always available: the toggle only governs the automatic
+                    // dwell preview, and pressing P shows the preview regardless.
+                    LabeledContent("Size") {
+                        HStack(spacing: 8) {
+                            Slider(value: $previewScale, in: SettingsKey.previewScaleRange, step: 0.25)
+                                .frame(width: 140)
+                            Text(previewScale.formatted(.percent.precision(.fractionLength(0))))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                                .frame(width: 44, alignment: .trailing)
+                        }
                     }
+                } header: {
+                    Text("Preview")
+                } footer: {
+                    Text("Hold ⌘ on a window to preview it after the delay, or press P while switching. The preview appears in a card beside the switcher; click it to switch to that window.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
-            } header: {
-                Text("Preview")
-            } footer: {
-                Text("Hold ⌘ on a window to preview it after the delay, or press P while switching. The preview appears in a card beside the switcher; click it to switch to that window.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

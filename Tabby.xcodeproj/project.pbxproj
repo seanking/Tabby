@@ -20,6 +20,8 @@
 		3CB72F1B30697AAD00A20A40 /* SkyLightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB72F1A30697AAD00A20A40 /* SkyLightTests.swift */; };
 		3CB72F1D30697CF600A20A40 /* DockMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CB72F1C30697CF600A20A40 /* DockMenuTests.swift */; };
 		3CE5FD03306B1A48003F2846 /* StatusMenuTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE5FD02306B1A48003F2846 /* StatusMenuTests.swift */; };
+		3CE739163097BB5800E63264 /* ThumbnailSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE739153097BB5800E63264 /* ThumbnailSwitcherView.swift */; };
+		3CE739183097BB6400E63264 /* ThumbnailLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE739173097BB6400E63264 /* ThumbnailLayoutTests.swift */; };
 		5A8D0D6EABDFFE33F1927589 /* EventTapManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4124192BBA869472106B3EDA /* EventTapManager.swift */; };
 		6DA1E75F69A1250599745361 /* DisplayNameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ABB51F9DF3ABC575CA31B55 /* DisplayNameTests.swift */; };
 		9BFBE7C535F3125811085968 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC33BC2C5CE8786D6FEB74F /* WindowManager.swift */; };
@@ -48,20 +50,21 @@
 		26D8334D21A2610249CFF337 /* NavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationTests.swift; sourceTree = "<group>"; };
 		27D063DBA009E9FAF61AF1ED /* BadgeCountTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgeCountTests.swift; sourceTree = "<group>"; };
 		31E476BA2057C11FA051F261 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		7056894954354A668E34B017 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
-		CE25F4FF4A5644D4B7058990 /* Config.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.local.xcconfig.example; sourceTree = "<group>"; };
 		3C2D586C30715EDC0095FF4A /* PreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewCard.swift; sourceTree = "<group>"; };
 		3CB72F1630619EE200A20A40 /* PointerMovementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PointerMovementTests.swift; sourceTree = "<group>"; };
 		3CB72F183061AE7100A20A40 /* PreviewSizeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewSizeTests.swift; sourceTree = "<group>"; };
 		3CB72F1A30697AAD00A20A40 /* SkyLightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkyLightTests.swift; sourceTree = "<group>"; };
 		3CB72F1C30697CF600A20A40 /* DockMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockMenuTests.swift; sourceTree = "<group>"; };
 		3CE5FD02306B1A48003F2846 /* StatusMenuTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMenuTests.swift; sourceTree = "<group>"; };
+		3CE739153097BB5800E63264 /* ThumbnailSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailSwitcherView.swift; sourceTree = "<group>"; };
+		3CE739173097BB6400E63264 /* ThumbnailLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailLayoutTests.swift; sourceTree = "<group>"; };
 		3CEE0EE1E7B97A810CF8659C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4124192BBA869472106B3EDA /* EventTapManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventTapManager.swift; sourceTree = "<group>"; };
 		46E8FCEF8EE638A513FC2C54 /* Permissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Permissions.swift; sourceTree = "<group>"; };
 		4CEBBDB56A288DA6BD91D016 /* SwitcherPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherPanel.swift; sourceTree = "<group>"; };
 		5C6046BBA2EF5E464D4D0516 /* ListTransformTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListTransformTests.swift; sourceTree = "<group>"; };
 		661BFFD658EB68054326626D /* SwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherView.swift; sourceTree = "<group>"; };
+		7056894954354A668E34B017 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 		7ABB51F9DF3ABC575CA31B55 /* DisplayNameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayNameTests.swift; sourceTree = "<group>"; };
 		96ABCA0AB2E02B3A188DAA9B /* TabbyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TabbyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A8FB20CFA1818E69C7DF302F /* SwitcherController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherController.swift; sourceTree = "<group>"; };
@@ -69,6 +72,7 @@
 		AFC33BC2C5CE8786D6FEB74F /* WindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
 		C1EB497773E4C7CF0EAC9A90 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		C7C5EE11AF673062D08F3EF1 /* KeyDecisionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyDecisionTests.swift; sourceTree = "<group>"; };
+		CE25F4FF4A5644D4B7058990 /* Config.local.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.local.xcconfig.example; sourceTree = "<group>"; };
 		D27BE6A2FDC38B53A649728C /* WindowInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowInfo.swift; sourceTree = "<group>"; };
 		DFEC69CEF0FB711B7AD0B04F /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		EBDA9DB3299E15402C8C6C3F /* Tabby-Dev.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tabby-Dev.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -104,6 +108,7 @@
 				D27BE6A2FDC38B53A649728C /* WindowInfo.swift */,
 				AFC33BC2C5CE8786D6FEB74F /* WindowManager.swift */,
 				3C2D586C30715EDC0095FF4A /* PreviewCard.swift */,
+				3CE739153097BB5800E63264 /* ThumbnailSwitcherView.swift */,
 			);
 			path = Tabby;
 			sourceTree = "<group>";
@@ -122,6 +127,7 @@
 				3CB72F1A30697AAD00A20A40 /* SkyLightTests.swift */,
 				3CB72F1C30697CF600A20A40 /* DockMenuTests.swift */,
 				3CE5FD02306B1A48003F2846 /* StatusMenuTests.swift */,
+				3CE739173097BB6400E63264 /* ThumbnailLayoutTests.swift */,
 			);
 			path = TabbyTests;
 			sourceTree = "<group>";
@@ -234,6 +240,7 @@
 				03F0FC5026D60B6DD9F13F86 /* NavigationTests.swift in Sources */,
 				3CB72F1730619EE200A20A40 /* PointerMovementTests.swift in Sources */,
 				10DBAEC36DE4CC5FB19F1B41 /* WindowInfoTests.swift in Sources */,
+				3CE739183097BB6400E63264 /* ThumbnailLayoutTests.swift in Sources */,
 				3CB72F1B30697AAD00A20A40 /* SkyLightTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -247,6 +254,7 @@
 				A6AF3F041937D4BA390685CE /* LaunchAtLogin.swift in Sources */,
 				1507D62C1EE87E73958F89F3 /* Permissions.swift in Sources */,
 				D36D778648A499FEFC752118 /* SettingsView.swift in Sources */,
+				3CE739163097BB5800E63264 /* ThumbnailSwitcherView.swift in Sources */,
 				1C3D8519D748BFFE1470CDDC /* SwitcherController.swift in Sources */,
 				157E50D000F9F7CFD4B8085F /* SwitcherPanel.swift in Sources */,
 				A4AB95481818B3165A9D77D0 /* SwitcherView.swift in Sources */,
