@@ -34,11 +34,24 @@ final class WindowManager: Sendable {
                 return window
             }
 
-        let visibleAndHidden = standardWindows(onScreen + hidden)
+        let visibleAndHidden0 = onScreen + hidden
+
+        // Both passes below need each relevant app's AX window map: this pass
+        // to verify/fill in the CG-based windows, and `minimizedWindows` to
+        // find windows CoreGraphics doesn't list at all. Fetching it once per
+        // pid here — instead of once per pass, as before — halves the
+        // Accessibility IPC round-trips `listWindows()` makes per activation.
+        let regularPIDs = NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .map(\.processIdentifier)
+        let pids = Set(visibleAndHidden0.map(\.pid)).union(regularPIDs).subtracting([selfPID])
+        let axByPID = Dictionary(uniqueKeysWithValues: pids.map { ($0, axWindowsByID(for: $0)) })
+
+        let visibleAndHidden = standardWindows(visibleAndHidden0, axByPID: axByPID)
 
         // Minimized windows aren't reliably present in the CoreGraphics list, so
         // gather them from the Accessibility tree and append them (grayed out).
-        let minimized = minimizedWindows(excluding: Set(visibleAndHidden.map(\.id)))
+        let minimized = minimizedWindows(excluding: Set(visibleAndHidden.map(\.id)), axByPID: axByPID)
 
         return visibleAndHidden + minimized
     }
@@ -46,14 +59,17 @@ final class WindowManager: Sendable {
     /// Collects minimized standard windows straight from each regular app's
     /// Accessibility tree (`AXMinimized`), since CoreGraphics doesn't reliably
     /// list minimized windows. Skips ids already present in the CG-based list.
-    private func minimizedWindows(excluding existingIDs: Set<CGWindowID>) -> [WindowInfo] {
+    private func minimizedWindows(
+        excluding existingIDs: Set<CGWindowID>,
+        axByPID: [pid_t: [CGWindowID: AXUIElement]]
+    ) -> [WindowInfo] {
         var result: [WindowInfo] = []
 
         for app in NSWorkspace.shared.runningApplications where app.activationPolicy == .regular {
             let pid = app.processIdentifier
             guard pid != selfPID else { continue }
 
-            for (windowID, axWindow) in axWindowsByID(for: pid) {
+            for (windowID, axWindow) in axByPID[pid] ?? [:] {
                 // Don't require AXStandardWindow here: on current macOS minimized
                 // windows misreport their subrole as AXDialog (the same quirk
                 // hidden apps have), so that check would wrongly drop every
@@ -115,19 +131,11 @@ final class WindowManager: Sendable {
     /// Apps like Mail expose extra layer-0 helper/panel windows that pass the
     /// size filter; we drop any window that doesn't match a standard window
     /// (`AXStandardWindow`) in the app's AX tree. If an app exposes no AX windows
-    /// at all (can't verify), its windows are kept as-is. AX windows are cached
-    /// per app so each process is only queried once.
-    private func standardWindows(_ windows: [WindowInfo]) -> [WindowInfo] {
-        var axByPID: [pid_t: [CGWindowID: AXUIElement]] = [:]
-
+    /// at all (can't verify), its windows are kept as-is. `axByPID` is the
+    /// shared per-pid AX window map `listWindows()` already built.
+    private func standardWindows(_ windows: [WindowInfo], axByPID: [pid_t: [CGWindowID: AXUIElement]]) -> [WindowInfo] {
         return windows.compactMap { window -> WindowInfo? in
-            let axWindows: [CGWindowID: AXUIElement]
-            if let cached = axByPID[window.pid] {
-                axWindows = cached
-            } else {
-                axWindows = axWindowsByID(for: window.pid)
-                axByPID[window.pid] = axWindows
-            }
+            let axWindows = axByPID[window.pid] ?? [:]
 
             // Can't verify without AX windows — keep the CG window untouched.
             guard !axWindows.isEmpty else { return window }
@@ -293,12 +301,14 @@ final class WindowManager: Sendable {
     /// `CGWindowListCreateImage`). Requires Screen Recording access and macOS 14+;
     /// returns nil (so the UI falls back to the app icon) without it or if the
     /// window can't be captured (e.g. it's minimized/off-screen). `content` is
-    /// the shared enumeration from `currentShareableContent()`. Pass `maxSize`
-    /// (points) to capture only as many pixels as a box that size needs — the
-    /// thumbnails strip shows many small snapshots at once, so full-size
-    /// captures would be slow and memory-hungry. The image's point size stays
-    /// the window's own, so its aspect ratio is unaffected either way.
-    func thumbnail(for window: WindowInfo, in content: SCShareableContent?, maxSize: CGSize? = nil) async -> NSImage? {
+    /// the shared enumeration from `currentShareableContent()`. `maxSize`
+    /// (points) caps the capture to only as many pixels as a box that size
+    /// needs — every caller shows the image no larger than some fixed box
+    /// (a thumbnail tile or the preview card), so capturing at the window's
+    /// full native resolution would be needless compositing and memory for
+    /// pixels nothing on screen ever uses. The image's point size stays the
+    /// window's own, so its aspect ratio is unaffected either way.
+    func thumbnail(for window: WindowInfo, in content: SCShareableContent?, maxSize: CGSize) async -> NSImage? {
         guard #available(macOS 14.0, *) else { return nil }
         guard let scWindow = content?.windows.first(where: { $0.windowID == window.id }) else {
             return nil
@@ -310,7 +320,7 @@ final class WindowManager: Sendable {
             // Retina displays, while keeping the image a reasonable size.
             let scale = 2.0
             var captureSize = scWindow.frame.size
-            if let maxSize, captureSize.width > 0, captureSize.height > 0 {
+            if captureSize.width > 0, captureSize.height > 0 {
                 // Shrink to fit the box (never enlarge), keeping the aspect ratio.
                 let fit = min(maxSize.width / captureSize.width, maxSize.height / captureSize.height, 1)
                 captureSize = CGSize(width: captureSize.width * fit, height: captureSize.height * fit)

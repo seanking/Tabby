@@ -131,6 +131,11 @@ final class SwitcherController: ObservableObject {
         UserDefaults.standard.object(forKey: SettingsKey.hapticFeedback) as? Bool ?? SettingsKey.defaultHapticFeedback
     }
 
+    /// Whether to show Dock notification badges on icons (Settings → Appearance).
+    private var showBadgesEnabled: Bool {
+        UserDefaults.standard.object(forKey: SettingsKey.showBadges) as? Bool ?? true
+    }
+
     func start() {
         eventTap.onActivate = { [weak self] in self?.activate() }
         eventTap.onAdvance = { [weak self] reverse in self?.advance(reverse: reverse) }
@@ -165,7 +170,9 @@ final class SwitcherController: ObservableObject {
         icons = Dictionary(uniqueKeysWithValues: Set(list.map(\.pid)).compactMap { pid in
             windowManager.icon(for: pid).map { (pid, $0) }
         })
-        badges = badgesByPID(for: list)
+        // Walking the Dock's AX tree for badge labels is wasted work when
+        // they're not even shown.
+        badges = showBadgesEnabled ? badgesByPID(for: list) : [:]
 
         // Drop cache entries for windows that no longer exist, then seed the
         // visible thumbnails from the cache so hidden/minimized windows show
@@ -651,11 +658,17 @@ final class SwitcherController: ObservableObject {
         thumbnailTask?.cancel()
         let snapshot = windows
         let manager = windowManager
-        // The strip only needs tile-sized snapshots; the list's preview card
-        // can grow large, so it keeps full-size captures.
-        let maxSize: CGSize? = switcherStyle == .thumbnails
-            ? switcherTileSize(scale: uiScale, screenSize: (screenFrame ?? NSScreen.main?.visibleFrame ?? .zero).size)
-            : nil
+        let screen = (screenFrame ?? NSScreen.main?.visibleFrame ?? .zero).size
+        // Cap the capture to the largest size its image could ever be shown
+        // at: the grid's tile box for the thumbnails strip, or the dwell
+        // preview card's box for the list (only the selected window's image
+        // is ever shown there, one at a time). Capturing at the window's full
+        // native resolution regardless — as this used to for the list — composites
+        // and allocates a bitmap far bigger than anything on screen uses, for
+        // every window in the list, not just the one that gets previewed.
+        let maxSize: CGSize = switcherStyle == .thumbnails
+            ? switcherTileSize(scale: uiScale, screenSize: screen)
+            : switcherPreviewSize(scale: previewScale, screenSize: screen)
         thumbnailTask = Task.detached(priority: .userInitiated) {
             // Enumerate shareable content once per refresh rather than once
             // per window — the per-window call used to repeat this
