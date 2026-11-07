@@ -657,13 +657,18 @@ final class SwitcherController: ObservableObject {
             ? switcherTileSize(scale: uiScale, screenSize: (screenFrame ?? NSScreen.main?.visibleFrame ?? .zero).size)
             : nil
         thumbnailTask = Task.detached(priority: .userInitiated) {
+            // Enumerate shareable content once per refresh rather than once
+            // per window — the per-window call used to repeat this
+            // WindowServer-wide enumeration itself, which got slower the more
+            // windows/apps were open and compounded under the concurrency below.
+            let content = await manager.currentShareableContent()
             await withTaskGroup(of: (CGWindowID, NSImage?).self) { group in
                 // Keep a few captures in flight at once so a strip full of
                 // tiles fills in quickly, without flooding ScreenCaptureKit.
                 var pending = snapshot.makeIterator()
                 func enqueueNext() {
                     guard let window = pending.next() else { return }
-                    group.addTask { (window.id, await manager.thumbnail(for: window, maxSize: maxSize)) }
+                    group.addTask { (window.id, await manager.thumbnail(for: window, in: content, maxSize: maxSize)) }
                 }
                 for _ in 0..<4 { enqueueNext() }
 

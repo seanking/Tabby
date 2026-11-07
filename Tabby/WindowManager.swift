@@ -280,26 +280,30 @@ final class WindowManager: Sendable {
         return (ref as? Bool) ?? false
     }
 
+    /// Enumerates ScreenCaptureKit's current shareable content once, so a
+    /// batch of `thumbnail(for:in:maxSize:)` calls (one per window in the
+    /// switcher) can share a single enumeration instead of each repeating
+    /// this relatively expensive, WindowServer-wide call on its own.
+    func currentShareableContent() async -> SCShareableContent? {
+        try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+    }
+
     /// Captures a live snapshot of a single window for the switcher HUD via
     /// ScreenCaptureKit (the modern replacement for the deprecated
     /// `CGWindowListCreateImage`). Requires Screen Recording access and macOS 14+;
     /// returns nil (so the UI falls back to the app icon) without it or if the
-    /// window can't be captured (e.g. it's minimized/off-screen). Pass `maxSize`
+    /// window can't be captured (e.g. it's minimized/off-screen). `content` is
+    /// the shared enumeration from `currentShareableContent()`. Pass `maxSize`
     /// (points) to capture only as many pixels as a box that size needs — the
     /// thumbnails strip shows many small snapshots at once, so full-size
     /// captures would be slow and memory-hungry. The image's point size stays
     /// the window's own, so its aspect ratio is unaffected either way.
-    func thumbnail(for window: WindowInfo, maxSize: CGSize? = nil) async -> NSImage? {
+    func thumbnail(for window: WindowInfo, in content: SCShareableContent?, maxSize: CGSize? = nil) async -> NSImage? {
         guard #available(macOS 14.0, *) else { return nil }
+        guard let scWindow = content?.windows.first(where: { $0.windowID == window.id }) else {
+            return nil
+        }
         do {
-            let content = try await SCShareableContent.excludingDesktopWindows(
-                false,
-                onScreenWindowsOnly: true
-            )
-            guard let scWindow = content.windows.first(where: { $0.windowID == window.id }) else {
-                return nil
-            }
-
             let filter = SCContentFilter(desktopIndependentWindow: scWindow)
             let config = SCStreamConfiguration()
             // Capture at 2x the window's point size for a crisp preview on
