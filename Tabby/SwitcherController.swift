@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import ScreenCaptureKit
 import SwiftUI
 
 /// Owns the whole Cmd+Tab replacement flow: listens for the hotkey via
@@ -67,6 +68,11 @@ final class SwitcherController: ObservableObject {
     /// the view so the preview card can point at it.
     private var selectedRowFrame: CGRect?
     private var thumbnailTask: Task<Void, Never>?
+    /// ScreenCaptureKit enumeration started as soon as Cmd+Tab activates, so
+    /// it runs during the activation delay instead of after the HUD appears.
+    /// Consumed (and cleared) by `loadThumbnails()`; dropped unused on a quick
+    /// switch that never shows the HUD.
+    private var shareableContentTask: Task<SCShareableContent?, Never>?
 
     /// Pending timer that reveals the HUD if Cmd is still held after the delay.
     private var presentationTask: Task<Void, Never>?
@@ -159,6 +165,14 @@ final class SwitcherController: ObservableObject {
     }
 
     private func activate() {
+        // Kick off the thumbnail enumeration before anything else so it
+        // overlaps both the AX work in `listWindows()` and the activation
+        // delay, and captures can start the moment the HUD appears.
+        let manager = windowManager
+        shareableContentTask = Task.detached(priority: .userInitiated) {
+            await manager.currentShareableContent()
+        }
+
         let list = windowManager.listWindows()
         guard list.count > 1 else { return }
 
@@ -605,6 +619,7 @@ final class SwitcherController: ObservableObject {
     private func endPresentation() {
         presentationTask?.cancel()
         presentationTask = nil
+        shareableContentTask = nil
         dwellTask?.cancel()
         dwellTask = nil
         previewWindowID = nil
@@ -669,12 +684,26 @@ final class SwitcherController: ObservableObject {
         let maxSize: CGSize = switcherStyle == .thumbnails
             ? switcherTileSize(scale: uiScale, screenSize: screen)
             : switcherPreviewSize(scale: previewScale, screenSize: screen)
+        // Use the enumeration `activate()` already started; fall back to a
+        // fresh one if there isn't one (e.g. a second refresh).
+        let prefetched = shareableContentTask
+        shareableContentTask = nil
         thumbnailTask = Task.detached(priority: .userInitiated) {
+            let refresh = thumbnailSignposter.beginInterval("Refresh", "\(snapshot.count) windows")
+            defer { thumbnailSignposter.endInterval("Refresh", refresh) }
+            var deliveredFirst = false
+
             // Enumerate shareable content once per refresh rather than once
             // per window — the per-window call used to repeat this
             // WindowServer-wide enumeration itself, which got slower the more
             // windows/apps were open and compounded under the concurrency below.
-            let content = await manager.currentShareableContent()
+            let content: SCShareableContent?
+            if let prefetched {
+                content = await prefetched.value
+            } else {
+                content = await manager.currentShareableContent()
+            }
+            thumbnailSignposter.emitEvent("ContentReady")
             await withTaskGroup(of: (CGWindowID, NSImage?).self) { group in
                 // Keep a few captures in flight at once so a strip full of
                 // tiles fills in quickly, without flooding ScreenCaptureKit.
@@ -692,6 +721,10 @@ final class SwitcherController: ObservableObject {
                     }
                     enqueueNext()
                     guard let image else { continue }
+                    if !deliveredFirst {
+                        deliveredFirst = true
+                        thumbnailSignposter.emitEvent("FirstThumbnail")
+                    }
                     await MainActor.run { [weak self] in
                         self?.thumbnails[id] = image
                         // Remember this snapshot so the window can still show a

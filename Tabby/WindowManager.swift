@@ -1,7 +1,17 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import OSLog
 import ScreenCaptureKit
+
+/// Signposts for the thumbnail pipeline (shareable-content enumeration, each
+/// window capture, and the switcher's refresh as a whole), so where the time
+/// goes before tiles fill in can be inspected in Instruments' os_signpost
+/// track. Shared by `WindowManager` and `SwitcherController`.
+let thumbnailSignposter = OSSignposter(
+    subsystem: Bundle.main.bundleIdentifier ?? "Tabby",
+    category: "Thumbnails"
+)
 
 /// Enumerates on-screen windows across every app and can raise/focus one of
 /// them by combining the CoreGraphics window list (for ordering, bounds and
@@ -293,7 +303,9 @@ final class WindowManager: Sendable {
     /// switcher) can share a single enumeration instead of each repeating
     /// this relatively expensive, WindowServer-wide call on its own.
     func currentShareableContent() async -> SCShareableContent? {
-        try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let state = thumbnailSignposter.beginInterval("ShareableContent")
+        defer { thumbnailSignposter.endInterval("ShareableContent", state) }
+        return try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     }
 
     /// Captures a live snapshot of a single window for the switcher HUD via
@@ -330,6 +342,8 @@ final class WindowManager: Sendable {
             config.showsCursor = false
             config.ignoreShadowsSingleWindow = true
 
+            let state = thumbnailSignposter.beginInterval("Capture", "window \(window.id)")
+            defer { thumbnailSignposter.endInterval("Capture", state) }
             let cgImage = try await SCScreenshotManager.captureImage(
                 contentFilter: filter,
                 configuration: config
